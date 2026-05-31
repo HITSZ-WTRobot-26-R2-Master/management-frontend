@@ -1,7 +1,14 @@
 import { useAtomValue, useSetAtom } from "jotai"
 import { useCallback, useEffect, useState } from "react"
-import { getApiError } from "@/lib/management-api"
 import {
+  AUTH_REQUIRED_ERROR,
+  getApiError,
+  hasManagementAuthToken,
+  isAbortError,
+} from "@/lib/management-api"
+import {
+  authTokenAtom,
+  baseUrlAtom,
   commandsAtom,
   latestErrorAtom,
   managementApiClientAtom,
@@ -61,7 +68,9 @@ const initialSubmissionState = {
 } satisfies CommandSubmissionState
 
 export function useCommandDiscovery(): CommandDiscoveryResult {
+  const baseUrl = useAtomValue(baseUrlAtom)
   const client = useAtomValue(managementApiClientAtom)
+  const token = useAtomValue(authTokenAtom)
   const setCommands = useSetAtom(commandsAtom)
   const setLatestError = useSetAtom(latestErrorAtom)
   const [refreshIndex, setRefreshIndex] = useState(0)
@@ -71,6 +80,7 @@ export function useCommandDiscovery(): CommandDiscoveryResult {
   const [submission, setSubmission] = useState<CommandSubmissionState>(
     initialSubmissionState,
   )
+  const hasToken = hasManagementAuthToken(token)
 
   const refresh = useCallback(() => {
     setRefreshIndex((current) => current + 1)
@@ -93,6 +103,18 @@ export function useCommandDiscovery(): CommandDiscoveryResult {
   )
 
   useEffect(() => {
+    if (!hasToken) {
+      setCommands([])
+      setDiscovery({
+        commands: [],
+        error: AUTH_REQUIRED_ERROR,
+        lastLoadedAt: null,
+        loading: false,
+        refreshing: false,
+      })
+      return
+    }
+
     const controller = new AbortController()
     let disposed = false
 
@@ -144,7 +166,15 @@ export function useCommandDiscovery(): CommandDiscoveryResult {
       disposed = true
       controller.abort()
     }
-  }, [client, refreshIndex, setCommands, setLatestError])
+  }, [
+    baseUrl,
+    client,
+    hasToken,
+    refreshIndex,
+    setCommands,
+    setLatestError,
+    token,
+  ])
 
   const submitResetOrigin = useCallback(
     async (
@@ -153,6 +183,16 @@ export function useCommandDiscovery(): CommandDiscoveryResult {
       confirm: boolean,
     ) => {
       if (!isResetOriginCommand(command)) {
+        return null
+      }
+
+      if (!hasToken) {
+        setSubmission({
+          error: AUTH_REQUIRED_ERROR,
+          response: null,
+          submitting: false,
+        })
+        setLatestError(AUTH_REQUIRED_ERROR)
         return null
       }
 
@@ -191,7 +231,7 @@ export function useCommandDiscovery(): CommandDiscoveryResult {
         return null
       }
     },
-    [client, handleSubmissionError, setLatestError],
+    [client, handleSubmissionError, hasToken, setLatestError],
   )
 
   return {
@@ -217,8 +257,4 @@ function toResetOriginJsonPayload(payload: ResetOriginPayload): JsonObject {
     pose_yaw_deg: payload.pose_yaw_deg,
     reason: payload.reason.trim(),
   }
-}
-
-function isAbortError(error: unknown) {
-  return error instanceof Error && error.name === "AbortError"
 }

@@ -1,7 +1,15 @@
 import { useAtomValue, useSetAtom } from "jotai"
 import { useCallback, useEffect, useState } from "react"
-import { getApiError } from "@/lib/management-api"
 import {
+  AUTH_REQUIRED_ERROR,
+  getApiError,
+  hasManagementAuthToken,
+  isAbortError,
+  isManagementAuthError,
+} from "@/lib/management-api"
+import {
+  authTokenAtom,
+  baseUrlAtom,
   connectionStateAtom,
   latestErrorAtom,
   managementApiClientAtom,
@@ -24,7 +32,9 @@ interface ServicesSnapshotState {
 }
 
 export function useServicesSnapshot(): ServicesSnapshotState {
+  const baseUrl = useAtomValue(baseUrlAtom)
   const client = useAtomValue(managementApiClientAtom)
+  const token = useAtomValue(authTokenAtom)
   const setServiceStatuses = useSetAtom(serviceStatusesAtom)
   const setServiceDefinitions = useSetAtom(serviceDefinitionsAtom)
   const setConnectionState = useSetAtom(connectionStateAtom)
@@ -41,8 +51,24 @@ export function useServicesSnapshot(): ServicesSnapshotState {
   const refresh = useCallback(() => {
     setRefreshIndex((current) => current + 1)
   }, [])
+  const hasToken = hasManagementAuthToken(token)
 
   useEffect(() => {
+    if (!hasToken) {
+      setServiceStatuses([])
+      setServiceDefinitions([])
+      setLatestError(null)
+      setConnectionState(toConnectionState("auth_required"))
+      setState({
+        loading: false,
+        refreshing: false,
+        error: AUTH_REQUIRED_ERROR,
+        definitionsError: null,
+        lastLoadedAt: null,
+      })
+      return
+    }
+
     const controller = new AbortController()
     let disposed = false
 
@@ -137,11 +163,14 @@ export function useServicesSnapshot(): ServicesSnapshotState {
     }
   }, [
     client,
+    baseUrl,
+    hasToken,
     refreshIndex,
     setConnectionState,
     setLatestError,
     setServiceDefinitions,
     setServiceStatuses,
+    token,
   ])
 
   return {
@@ -168,13 +197,9 @@ function toConnectionState(status: ConnectionStatus) {
 }
 
 function getConnectionStatus(error: ApiError): ConnectionStatus {
-  if (error.code === "auth_required" || error.code === "auth_invalid") {
+  if (isManagementAuthError(error)) {
     return error.code
   }
 
   return "error"
-}
-
-function isAbortError(error: unknown) {
-  return error instanceof Error && error.name === "AbortError"
 }

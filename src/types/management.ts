@@ -81,7 +81,7 @@ export interface DockerStatus {
   started_at: string | null
   finished_at: string | null
   exit_code: number | null
-  restart_count: number
+  restart_count: number | null
   health: string | null
 }
 

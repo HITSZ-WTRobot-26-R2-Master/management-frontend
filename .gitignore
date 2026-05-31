@@ -14,6 +14,7 @@ dist/
 .vite/
 .turbo/
 .cache/
+.playwright-cli/
 coverage/
 
 # OS/editor noise

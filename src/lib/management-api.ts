@@ -24,7 +24,12 @@ import type {
   ServiceStatus,
 } from "@/types/management"
 
-export const DEFAULT_MANAGEMENT_BASE_URL = "http://127.0.0.1:8080"
+export const DEFAULT_MANAGEMENT_BASE_URL = "/management-api"
+
+export const AUTH_REQUIRED_ERROR = {
+  code: "auth_required",
+  message: "管理后端需要认证",
+} satisfies ApiError
 
 const dockerStates = [
   "running",
@@ -253,10 +258,61 @@ export class ManagementApiClient {
   }
 }
 
+export function isValidManagementBaseUrl(baseUrl: string) {
+  const normalizedBaseUrl = baseUrl.trim()
+
+  if (isRelativeManagementBaseUrl(normalizedBaseUrl)) {
+    return true
+  }
+
+  try {
+    const url = new URL(normalizedBaseUrl)
+
+    return url.protocol === "http:" || url.protocol === "https:"
+  } catch {
+    return false
+  }
+}
+
+export function hasManagementAuthToken(token: string) {
+  return token.trim().length > 0
+}
+
+export function isManagementAuthError(
+  error: ApiError,
+): error is ApiError & { code: "auth_required" | "auth_invalid" } {
+  return error.code === "auth_required" || error.code === "auth_invalid"
+}
+
+export function isAbortError(error: unknown) {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "name" in error &&
+    error.name === "AbortError"
+  )
+}
+
 export function buildManagementHttpUrl(baseUrl: string, path: string) {
-  const base = new URL(baseUrl)
-  const basePath = base.pathname.replace(/\/+$/, "")
+  const normalizedBaseUrl = baseUrl.trim()
   const endpointPath = path.replace(/^\/+/, "")
+
+  if (isRelativeManagementBaseUrl(normalizedBaseUrl)) {
+    const basePath = normalizedBaseUrl.replace(/\/+$/, "")
+
+    return `${basePath}/${endpointPath}`
+  }
+
+  const base = new URL(normalizedBaseUrl)
+
+  if (base.protocol !== "http:" && base.protocol !== "https:") {
+    throw new ManagementApiError({
+      code: "request_failed",
+      message: "管理后端 URL 必须使用 http、https 或同源代理路径",
+    })
+  }
+
+  const basePath = base.pathname.replace(/\/+$/, "")
 
   base.pathname = `${basePath}/`
   base.search = ""
@@ -266,7 +322,10 @@ export function buildManagementHttpUrl(baseUrl: string, path: string) {
 }
 
 export function buildManagementWebSocketUrl(baseUrl: string, token: string) {
-  const url = new URL(buildManagementHttpUrl(baseUrl, "/ws/events"))
+  const url = new URL(
+    buildManagementHttpUrl(baseUrl, "/ws/events"),
+    getCurrentBrowserOrigin(),
+  )
 
   if (url.protocol === "http:") {
     url.protocol = "ws:"
@@ -286,6 +345,14 @@ export function buildManagementWebSocketUrl(baseUrl: string, token: string) {
   }
 
   return url.toString()
+}
+
+function isRelativeManagementBaseUrl(baseUrl: string) {
+  return baseUrl.startsWith("/") && !baseUrl.startsWith("//")
+}
+
+function getCurrentBrowserOrigin() {
+  return globalThis.location?.origin ?? "http://localhost"
 }
 
 export function createManagementApiClient(options: ManagementApiClientOptions) {
@@ -337,10 +404,7 @@ export function parseApiError(payload: unknown, status: number): ApiError {
   }
 
   if (status === 401) {
-    return {
-      code: "auth_required",
-      message: "管理后端需要认证",
-    }
+    return AUTH_REQUIRED_ERROR
   }
 
   return {
@@ -400,7 +464,7 @@ function isDockerStatus(value: unknown): value is DockerStatus {
     isNullableString(value.started_at) &&
     isNullableString(value.finished_at) &&
     isNullableNumber(value.exit_code) &&
-    isNumber(value.restart_count) &&
+    isNullableNumber(value.restart_count) &&
     isNullableString(value.health)
   )
 }

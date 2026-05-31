@@ -31,6 +31,7 @@ import { useAtom, useAtomValue, useSetAtom } from "jotai"
 import {
   type FormEvent,
   type ReactNode,
+  useCallback,
   useMemo,
   useState,
 } from "react"
@@ -48,7 +49,12 @@ import {
   useSelectedServiceDiagnostics,
 } from "@/hooks/useSelectedServiceDiagnostics"
 import { useServicesSnapshot } from "@/hooks/useServicesSnapshot"
-import { createManagementApiClient, getApiError } from "@/lib/management-api"
+import {
+  createManagementApiClient,
+  getApiError,
+  hasManagementAuthToken,
+  isValidManagementBaseUrl,
+} from "@/lib/management-api"
 import {
   authTokenAtom,
   baseUrlAtom,
@@ -219,6 +225,14 @@ export function App() {
   const snapshot = useServicesSnapshot()
   const commandDiscovery = useCommandDiscovery()
   const eventStream = useEventStream()
+  const refreshSnapshot = snapshot.refresh
+  const refreshCommands = commandDiscovery.refresh
+  const refreshRecent = eventStream.refreshRecent
+  const refreshManagementData = useCallback(() => {
+    refreshSnapshot()
+    refreshCommands()
+    refreshRecent()
+  }, [refreshCommands, refreshRecent, refreshSnapshot])
   const [filters, setFilters] = useState<ServiceFilterState>({
     status: allFilterValue,
     category: allFilterValue,
@@ -233,7 +247,7 @@ export function App() {
     <ManagementShell>
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_390px]">
         <section className="space-y-6">
-          <ConnectionSettings onRefresh={snapshot.refresh} />
+          <ConnectionSettings onRefresh={refreshManagementData} />
           <HeaderSummary
             eventStream={eventStream}
             lastLoadedAt={snapshot.lastLoadedAt}
@@ -281,7 +295,7 @@ function ConnectionSettings({ onRefresh }: { onRefresh: () => void }) {
   const [baseUrlDraft, setBaseUrlDraft] = useState(baseUrl)
   const [tokenDraft, setTokenDraft] = useState(token)
 
-  const hasToken = token.trim().length > 0
+  const hasToken = hasManagementAuthToken(token)
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -298,19 +312,24 @@ function ConnectionSettings({ onRefresh }: { onRefresh: () => void }) {
       return
     }
 
-    try {
-      new URL(normalizedBaseUrl)
-    } catch {
+    if (!isValidManagementBaseUrl(normalizedBaseUrl)) {
       setConnectionState(toConnectionState("error"))
       setLatestError({
         code: "request_failed",
-        message: "管理后端基础 URL 必须是有效 URL",
+        message: "管理后端基础 URL 必须是有效 URL 或同源代理路径",
       })
       return
     }
 
     setBaseUrl(normalizedBaseUrl)
     setToken(nextToken)
+
+    if (!hasManagementAuthToken(nextToken)) {
+      setConnectionState(toConnectionState("auth_required"))
+      setLatestError(null)
+      return
+    }
+
     setConnectionState({ status: "checking", checked_at: null })
     setLatestError(null)
 
@@ -338,7 +357,7 @@ function ConnectionSettings({ onRefresh }: { onRefresh: () => void }) {
     clearAuthToken()
     setTokenDraft("")
     setLatestError(null)
-    setConnectionState(toConnectionState("idle"))
+    setConnectionState(toConnectionState("auth_required"))
   }
 
   return (
@@ -460,7 +479,6 @@ function HeaderSummary({
   const commands = useAtomValue(commandsAtom)
   const events = useAtomValue(recentEventsAtom)
   const connectionState = useAtomValue(connectionStateAtom)
-  const latestError = useAtomValue(latestErrorAtom)
   const counts = services.reduce(
     (summary, service) => {
       summary[service.overall.level] += 1
@@ -493,7 +511,7 @@ function HeaderSummary({
         detail="可见的类型化命令定义"
       />
       <MetricTile
-        icon={latestError || eventStream.error ? AlertTriangle : Activity}
+        icon={eventStream.error ? AlertTriangle : Activity}
         label="事件流"
         value={connectionLabels[connectionState.status]}
         detail={
@@ -505,9 +523,7 @@ function HeaderSummary({
                 )}`
               : eventStream.error
                 ? formatApiError(eventStream.error)
-                : latestError
-                  ? formatApiError(latestError)
-                  : eventStream.loadedRecentAt
+                : eventStream.loadedRecentAt
                     ? `最近事件已加载 ${formatTimestamp(
                         eventStream.loadedRecentAt,
                       )}`
@@ -523,9 +539,7 @@ function HeaderSummary({
         detail={
           eventStream.loadedRecentAt
             ? `已加载 ${formatTimestamp(eventStream.loadedRecentAt)}`
-            : latestError
-              ? formatApiError(latestError)
-              : lastLoadedAt
+            : lastLoadedAt
                 ? `已加载 ${formatTimestamp(lastLoadedAt)}`
                 : "等待首次加载"
         }
@@ -630,9 +644,9 @@ function ServiceOverview({
         </InlineNotice>
       ) : null}
 
-      {loading ? (
+      {loading && services.length === 0 ? (
         <LoadingServicesState />
-      ) : error ? (
+      ) : error && services.length === 0 ? (
         <ErrorServicesState error={error} onRefresh={onRefresh} />
       ) : services.length === 0 ? (
         <EmptyServicesState />
@@ -1586,7 +1600,7 @@ function ServiceRow({ service, selected, onSelect }: ServiceRowProps) {
           {service.docker.status ? `，状态 ${service.docker.status}` : ""}
         </p>
         <p className="mt-1 text-xs text-muted-foreground">
-          重启 {service.docker.restart_count} 次
+          重启 {formatRestartCount(service.docker.restart_count)}
         </p>
       </td>
       <td className="px-5 py-4">
@@ -1848,9 +1862,12 @@ function LayerLine({ icon: Icon, label, value }: LayerLineProps) {
 }
 
 function PanelError({ error }: { error: ApiError }) {
+  const copy = getErrorStateCopy(error)
+
   return (
     <div className="mt-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
-      <p className="font-semibold">{getErrorStateCopy(error).title}</p>
+      <p className="font-semibold">{copy.title}</p>
+      <p className="mt-1">{copy.body}</p>
       <p className="mt-1 break-words">{formatApiError(error)}</p>
     </div>
   )
@@ -1894,7 +1911,7 @@ function DockerDetailPanel({ service }: { service: ServiceStatus | null }) {
           />
           <DetailItem
             label="重启次数"
-            value={docker.restart_count.toString()}
+            value={formatNullableNumber(docker.restart_count)}
           />
           <DetailItem label="健康状态" value={docker.health ?? "未上报"} />
         </dl>
@@ -2710,6 +2727,14 @@ function formatNullableTimestamp(value: string | null) {
   return value ? formatTimestamp(value) : "未上报"
 }
 
+function formatNullableNumber(value: number | null) {
+  return value === null ? "未上报" : value.toString()
+}
+
+function formatRestartCount(value: number | null) {
+  return value === null ? "未上报" : `${value} 次`
+}
+
 function formatBoolean(value: boolean) {
   return value ? "是" : "否"
 }
@@ -2803,7 +2828,9 @@ function formatDockerSummary(service: ServiceStatus) {
 
   return `${formatDockerState(service.docker.state)}，运行=${formatBoolean(
     service.docker.running,
-  )}${status}，重启 ${service.docker.restart_count} 次${exitCode}`
+  )}${status}，重启 ${formatRestartCount(
+    service.docker.restart_count,
+  )}${exitCode}`
 }
 
 function getCommandErrorCopy(error: ApiError): {
@@ -2870,11 +2897,20 @@ function getErrorStateCopy(error: ApiError): {
     }
   }
 
+  if (error.code === "docker_operation_failed") {
+    return {
+      body: "后端已收到请求，但本次 Docker 操作失败。服务状态和 ROS 信息可能仍可用。",
+      icon: Container,
+      iconClass: "text-red-700",
+      title: "Docker 操作失败",
+    }
+  }
+
   return {
-    body: "无法从管理后端加载服务快照。请检查后端 URL、令牌和网络路径后重试。",
+    body: "本次管理请求未完成。请检查后端 URL、令牌和网络路径后重试。",
     icon: AlertTriangle,
     iconClass: "text-red-700",
-    title: "服务快照不可用",
+    title: "管理请求失败",
   }
 }
 

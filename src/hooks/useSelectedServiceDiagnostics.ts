@@ -1,11 +1,18 @@
 import { useAtomValue, useSetAtom } from "jotai"
 import { useCallback, useEffect, useState } from "react"
-import { getApiError } from "@/lib/management-api"
+import {
+  AUTH_REQUIRED_ERROR,
+  getApiError,
+  hasManagementAuthToken,
+  isAbortError,
+} from "@/lib/management-api"
 import {
   isServiceNotFoundError,
   removeStaleServiceStatus,
 } from "@/lib/service-not-found-recovery"
 import {
+  authTokenAtom,
+  baseUrlAtom,
   latestErrorAtom,
   managementApiClientAtom,
   selectedServiceNameAtom,
@@ -70,10 +77,13 @@ export function useSelectedServiceDiagnostics(
   logOptions: ServiceLogOptions,
   onServiceNotFound: () => void,
 ): SelectedServiceDiagnosticsState {
+  const baseUrl = useAtomValue(baseUrlAtom)
   const client = useAtomValue(managementApiClientAtom)
+  const token = useAtomValue(authTokenAtom)
   const setLatestError = useSetAtom(latestErrorAtom)
   const setSelectedServiceName = useSetAtom(selectedServiceNameAtom)
   const setServiceStatuses = useSetAtom(serviceStatusesAtom)
+  const hasToken = hasManagementAuthToken(token)
   const [detailRefreshIndex, setDetailRefreshIndex] = useState(0)
   const [logsRefreshIndex, setLogsRefreshIndex] = useState(0)
   const [statsRefreshIndex, setStatsRefreshIndex] = useState(0)
@@ -117,6 +127,16 @@ export function useSelectedServiceDiagnostics(
   const restartHard = useCallback(
     async (reason: string) => {
       if (!serviceName) {
+        return null
+      }
+
+      if (!hasToken) {
+        setRestart({
+          error: AUTH_REQUIRED_ERROR,
+          response: null,
+          submitting: false,
+        })
+        setLatestError(AUTH_REQUIRED_ERROR)
         return null
       }
 
@@ -167,7 +187,7 @@ export function useSelectedServiceDiagnostics(
         return null
       }
     },
-    [client, handleServiceNotFound, serviceName, setLatestError],
+    [client, handleServiceNotFound, hasToken, serviceName, setLatestError],
   )
 
   useEffect(() => {
@@ -180,6 +200,17 @@ export function useSelectedServiceDiagnostics(
   useEffect(() => {
     if (!serviceName) {
       setDetail(initialRequestState)
+      return
+    }
+
+    if (!hasToken) {
+      setDetail({
+        data: null,
+        error: AUTH_REQUIRED_ERROR,
+        loading: false,
+        refreshing: false,
+        loadedAt: null,
+      })
       return
     }
 
@@ -241,16 +272,30 @@ export function useSelectedServiceDiagnostics(
     }
   }, [
     client,
+    baseUrl,
     detailRefreshIndex,
     handleServiceNotFound,
+    hasToken,
     serviceName,
     setLatestError,
     setServiceStatuses,
+    token,
   ])
 
   useEffect(() => {
     if (!serviceName) {
       setLogs(initialRequestState)
+      return
+    }
+
+    if (!hasToken) {
+      setLogs({
+        data: null,
+        error: AUTH_REQUIRED_ERROR,
+        loading: false,
+        refreshing: false,
+        loadedAt: null,
+      })
       return
     }
 
@@ -279,7 +324,6 @@ export function useSelectedServiceDiagnostics(
           return
         }
 
-        setLatestError(null)
         setLogs({
           data: response,
           error: null,
@@ -294,7 +338,6 @@ export function useSelectedServiceDiagnostics(
 
         const apiError = getApiError(error)
         handleServiceNotFound(apiError, selectedServiceName)
-        setLatestError(apiError)
         setLogs((current) => ({
           ...current,
           error: apiError,
@@ -312,19 +355,32 @@ export function useSelectedServiceDiagnostics(
     }
   }, [
     client,
+    baseUrl,
     logOptions.stderr,
     logOptions.stdout,
     logOptions.tail,
     logOptions.timestamps,
     logsRefreshIndex,
     serviceName,
+    hasToken,
     handleServiceNotFound,
-    setLatestError,
+    token,
   ])
 
   useEffect(() => {
     if (!serviceName) {
       setStats(initialRequestState)
+      return
+    }
+
+    if (!hasToken) {
+      setStats({
+        data: null,
+        error: AUTH_REQUIRED_ERROR,
+        loading: false,
+        refreshing: false,
+        loadedAt: null,
+      })
       return
     }
 
@@ -350,7 +406,6 @@ export function useSelectedServiceDiagnostics(
           return
         }
 
-        setLatestError(null)
         setStats({
           data: response,
           error: null,
@@ -365,7 +420,6 @@ export function useSelectedServiceDiagnostics(
 
         const apiError = getApiError(error)
         handleServiceNotFound(apiError, selectedServiceName)
-        setLatestError(apiError)
         setStats((current) => ({
           ...current,
           error: apiError,
@@ -383,10 +437,12 @@ export function useSelectedServiceDiagnostics(
     }
   }, [
     client,
+    baseUrl,
     handleServiceNotFound,
+    hasToken,
     serviceName,
-    setLatestError,
     statsRefreshIndex,
+    token,
   ])
 
   return {
@@ -416,8 +472,4 @@ function replaceServiceStatus(
   return services.map((service, index) =>
     index === existingIndex ? nextService : service,
   )
-}
-
-function isAbortError(error: unknown) {
-  return error instanceof Error && error.name === "AbortError"
 }

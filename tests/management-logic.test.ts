@@ -4,7 +4,14 @@ import {
   isHighRisk,
 } from "../src/lib/command-confirmation"
 import { reduceServiceStatusesForEvent } from "../src/lib/event-reducer"
-import { parseApiError } from "../src/lib/management-api"
+import {
+  buildManagementHttpUrl,
+  buildManagementWebSocketUrl,
+  isAbortError,
+  isServiceStatus,
+  isValidManagementBaseUrl,
+  parseApiError,
+} from "../src/lib/management-api"
 import {
   isServiceNotFoundError,
   removeStaleServiceStatus,
@@ -47,6 +54,72 @@ describe("management API errors", () => {
       code: "request_failed",
       message: "管理后端请求失败，HTTP 503",
     })
+  })
+
+  test("detects browser abort errors without relying on Error inheritance", () => {
+    expect(isAbortError({ name: "AbortError" })).toBe(true)
+    expect(isAbortError(new Error("AbortError"))).toBe(false)
+  })
+})
+
+describe("management API URL helpers", () => {
+  test("builds HTTP URLs for the same-origin development proxy", () => {
+    expect(buildManagementHttpUrl("/management-api", "/api/services")).toBe(
+      "/management-api/api/services",
+    )
+    expect(buildManagementHttpUrl("/management-api/", "readyz")).toBe(
+      "/management-api/readyz",
+    )
+  })
+
+  test("builds WebSocket URLs for the same-origin development proxy", () => {
+    const previousLocation = globalThis.location
+
+    Object.defineProperty(globalThis, "location", {
+      configurable: true,
+      value: {
+        origin: "http://127.0.0.1:5173",
+      },
+    })
+
+    try {
+      expect(
+        buildManagementWebSocketUrl("/management-api", "change-me"),
+      ).toBe("ws://127.0.0.1:5173/management-api/ws/events?token=change-me")
+    } finally {
+      Object.defineProperty(globalThis, "location", {
+        configurable: true,
+        value: previousLocation,
+      })
+    }
+  })
+
+  test("accepts only HTTP(S) URLs or same-origin proxy paths", () => {
+    expect(isValidManagementBaseUrl("http://192.168.31.52:8080")).toBe(true)
+    expect(isValidManagementBaseUrl("/management-api")).toBe(true)
+    expect(isValidManagementBaseUrl("ftp://192.168.31.52:8080")).toBe(false)
+    expect(isValidManagementBaseUrl("//192.168.31.52:8080")).toBe(false)
+  })
+})
+
+describe("management API validators", () => {
+  test("accepts docker-unavailable service status with null restart count", () => {
+    expect(
+      isServiceStatus(
+        makeServiceStatus({
+          docker: {
+            exists: false,
+            restart_count: null,
+            state: "unknown",
+            status: "docker unavailable",
+          },
+          overall: {
+            level: "unknown",
+            reason: "docker unavailable",
+          },
+        }),
+      ),
+    ).toBe(true)
   })
 })
 

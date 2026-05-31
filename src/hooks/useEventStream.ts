@@ -1,12 +1,16 @@
 import { useAtomValue, useSetAtom } from "jotai"
-import { useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import {
   getSnapshotServices,
   reduceServiceStatusesForEvent,
 } from "@/lib/event-reducer"
 import {
+  AUTH_REQUIRED_ERROR,
   buildManagementWebSocketUrl,
   getApiError,
+  hasManagementAuthToken,
+  isAbortError,
+  isManagementAuthError,
   isManagementEvent,
 } from "@/lib/management-api"
 import {
@@ -35,6 +39,7 @@ interface EventStreamState {
   fallbackRefreshAt: string | null
   lastEventAt: string | null
   loadedRecentAt: string | null
+  refreshRecent: () => void
 }
 
 export function useEventStream(): EventStreamState {
@@ -46,14 +51,31 @@ export function useEventStream(): EventStreamState {
   const setRecentEvents = useSetAtom(recentEventsAtom)
   const setServiceStatuses = useSetAtom(serviceStatusesAtom)
   const fallbackInFlightRef = useRef(false)
+  const [recentRefreshIndex, setRecentRefreshIndex] = useState(0)
   const [state, setState] = useState<EventStreamState>({
     error: null,
     fallbackRefreshAt: null,
     lastEventAt: null,
     loadedRecentAt: null,
+    refreshRecent: () => undefined,
   })
+  const refreshRecent = useCallback(() => {
+    setRecentRefreshIndex((current) => current + 1)
+  }, [])
+  const hasToken = hasManagementAuthToken(token)
 
   useEffect(() => {
+    if (!hasToken) {
+      setRecentEvents([])
+      setState((current) => ({
+        ...current,
+        error: AUTH_REQUIRED_ERROR,
+        loadedRecentAt: null,
+        refreshRecent,
+      }))
+      return
+    }
+
     const controller = new AbortController()
     let disposed = false
 
@@ -103,18 +125,44 @@ export function useEventStream(): EventStreamState {
       disposed = true
       controller.abort()
     }
-  }, [client, setLatestError, setRecentEvents, setServiceStatuses])
+  }, [
+    client,
+    hasToken,
+    recentRefreshIndex,
+    refreshRecent,
+    setLatestError,
+    setRecentEvents,
+    setServiceStatuses,
+  ])
 
   useEffect(() => {
+    if (!hasToken) {
+      setConnectionState({
+        status: "auth_required",
+        checked_at: new Date().toISOString(),
+        retry_attempt: 0,
+        next_retry_at: null,
+      })
+      setLatestError(null)
+      setState((current) => ({
+        ...current,
+        error: AUTH_REQUIRED_ERROR,
+        fallbackRefreshAt: null,
+        lastEventAt: null,
+        refreshRecent,
+      }))
+      return
+    }
+
     let disposed = false
     let socket: WebSocket | null = null
     let reconnectTimer: number | null = null
     let fallbackController: AbortController | null = null
     let retryAttempt = 0
 
-    const refreshFallback = async () => {
+    const refreshFallback = async (): Promise<ApiError | null> => {
       if (fallbackInFlightRef.current) {
-        return
+        return null
       }
 
       const controller = new AbortController()
@@ -124,7 +172,7 @@ export function useEventStream(): EventStreamState {
         const services = await client.listServices(controller.signal)
 
         if (disposed) {
-          return
+          return null
         }
 
         const fallbackAt = new Date().toISOString()
@@ -137,9 +185,10 @@ export function useEventStream(): EventStreamState {
           ...current,
           fallbackRefreshAt: fallbackAt,
         }))
+        return null
       } catch (error) {
         if (disposed) {
-          return
+          return null
         }
 
         const apiError = getApiError(error)
@@ -147,16 +196,16 @@ export function useEventStream(): EventStreamState {
         setLatestError(apiError)
         setConnectionState((current) => ({
           ...current,
-          status:
-            apiError.code === "auth_required" || apiError.code === "auth_invalid"
-              ? getConnectionStatus(apiError)
-              : current.status,
+          status: isManagementAuthError(apiError)
+            ? getConnectionStatus(apiError)
+            : current.status,
           checked_at: checkedAt,
         }))
         setState((current) => ({
           ...current,
           error: apiError,
         }))
+        return apiError
       } finally {
         if (fallbackController === controller) {
           fallbackController = null
@@ -165,12 +214,16 @@ export function useEventStream(): EventStreamState {
       }
     }
 
-    const scheduleReconnect = () => {
+    const scheduleReconnect = (options: { refreshFallback: boolean } = {
+      refreshFallback: true,
+    }) => {
       if (disposed) {
         return
       }
 
-      void refreshFallback()
+      if (options.refreshFallback) {
+        void refreshFallback()
+      }
 
       if (retryAttempt >= maxReconnectAttempts) {
         setConnectionState((current) => ({
@@ -200,11 +253,22 @@ export function useEventStream(): EventStreamState {
       }, delayMs)
     }
 
+    const handleClosedBeforeOpen = async () => {
+      const apiError = await refreshFallback()
+
+      if (disposed || (apiError && isManagementAuthError(apiError))) {
+        return
+      }
+
+      scheduleReconnect({ refreshFallback: false })
+    }
+
     const connect = () => {
       if (disposed) {
         return
       }
 
+      let socketOpened = false
       let url: string
       try {
         url = buildManagementWebSocketUrl(baseUrl, token)
@@ -251,6 +315,7 @@ export function useEventStream(): EventStreamState {
           return
         }
 
+        socketOpened = true
         retryAttempt = 0
         setConnectionState((current) => ({
           ...current,
@@ -291,7 +356,12 @@ export function useEventStream(): EventStreamState {
       })
 
       socket.addEventListener("close", () => {
+        const closedBeforeOpen = !socketOpened
         socket = null
+        if (closedBeforeOpen) {
+          void handleClosedBeforeOpen()
+          return
+        }
         scheduleReconnect()
       })
 
@@ -313,6 +383,8 @@ export function useEventStream(): EventStreamState {
   }, [
     baseUrl,
     client,
+    hasToken,
+    refreshRecent,
     setConnectionState,
     setLatestError,
     setRecentEvents,
@@ -320,7 +392,10 @@ export function useEventStream(): EventStreamState {
     token,
   ])
 
-  return state
+  return {
+    ...state,
+    refreshRecent,
+  }
 }
 
 function parseSocketEvent(data: unknown): ManagementEvent | null {
@@ -378,8 +453,4 @@ function getConnectionStatus(error: ApiError): ConnectionStatus {
   }
 
   return "error"
-}
-
-function isAbortError(error: unknown) {
-  return error instanceof Error && error.name === "AbortError"
 }
