@@ -46,6 +46,12 @@ identifiers, backend DTO fields, API paths, enum values, service names, command
 names, package metadata, and generated/tool output in their required technical
 forms unless a display formatter explicitly translates them for operators.
 
+Frontend agents may use `$playwright-cli` for browser debugging, UI regression
+checks, request inspection, screenshots, and user-visible workflow validation.
+When backend behavior is required for verification, ask the main agent or user
+to ensure the backend service is running; do not assume the frontend agent can
+deploy the backend.
+
 When frontend debugging indicates a probable backend issue or API contract
 drift, coordinate with backend developers through the shared `.handoff/`
 directory using the `$fullstack-handoff` workflow. Create frontend-to-backend
