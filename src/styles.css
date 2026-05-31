@@ -41,6 +41,13 @@
     font-family: var(--font-sans);
   }
 
+  html,
+  body,
+  #root {
+    height: 100%;
+    overflow: hidden;
+  }
+
   button,
   input,
   select,

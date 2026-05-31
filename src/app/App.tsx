@@ -1,6 +1,7 @@
 import {
   Activity,
   AlertTriangle,
+  Boxes,
   CheckCircle2,
   CircleHelp,
   Container,
@@ -35,7 +36,10 @@ import {
   useMemo,
   useState,
 } from "react"
-import { ManagementShell } from "@/components/management/ManagementShell"
+import {
+  type ManagementTab,
+  ManagementShell,
+} from "@/components/management/ManagementShell"
 import {
   type CommandDiscoveryState,
   type CommandSubmissionState,
@@ -217,11 +221,27 @@ const overallIcons: Record<OverallLevel, LucideIcon> = {
   unknown: CircleHelp,
 }
 
+type DetailTab = "status" | "docker" | "ros" | "logs" | "stats" | "restart"
+
+const detailTabs: Array<{
+  id: DetailTab
+  label: string
+  icon: LucideIcon
+}> = [
+  { id: "status", label: "状态", icon: Gauge },
+  { id: "docker", label: "Docker", icon: Container },
+  { id: "ros", label: "ROS", icon: RadioTower },
+  { id: "logs", label: "日志", icon: FileText },
+  { id: "stats", label: "统计", icon: Cpu },
+  { id: "restart", label: "重启", icon: RotateCcw },
+]
+
 export function App() {
   const services = useAtomValue(serviceStatusesAtom)
   const selectedService = useAtomValue(selectedServiceAtom)
   const selectedDefinition = useAtomValue(selectedServiceDefinitionAtom)
   const setSelectedServiceName = useSetAtom(selectedServiceNameAtom)
+  const connectionState = useAtomValue(connectionStateAtom)
   const snapshot = useServicesSnapshot()
   const commandDiscovery = useCommandDiscovery()
   const eventStream = useEventStream()
@@ -238,21 +258,51 @@ export function App() {
     category: allFilterValue,
     risk: allFilterValue,
   })
+  const [activeTab, setActiveTab] = useState<ManagementTab>("overview")
   const filteredServices = useMemo(
     () => filterServices(services, filters),
     [filters, services],
   )
+  const refreshing =
+    snapshot.refreshing ||
+    commandDiscovery.discovery.refreshing ||
+    connectionState.status === "checking"
+
+  const handleSelectService = useCallback(
+    (serviceName: string) => {
+      setSelectedServiceName(serviceName)
+    },
+    [setSelectedServiceName],
+  )
+
+  const handleOpenServiceDetails = useCallback(
+    (serviceName: string) => {
+      setSelectedServiceName(serviceName)
+      setActiveTab("details")
+    },
+    [setSelectedServiceName],
+  )
 
   return (
-    <ManagementShell>
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_390px]">
-        <section className="space-y-6">
-          <ConnectionSettings onRefresh={refreshManagementData} />
-          <HeaderSummary
+    <ManagementShell
+      activeTab={activeTab}
+      connectionStatus={<ConnectionBadge state={connectionState} />}
+      refreshing={refreshing}
+      onRefresh={refreshManagementData}
+      onTabChange={setActiveTab}
+    >
+      <div className="flex h-full min-h-0 flex-col overflow-hidden">
+        {activeTab === "overview" ? (
+          <OverviewTab
             eventStream={eventStream}
             lastLoadedAt={snapshot.lastLoadedAt}
             services={services}
+            onOpenEvents={() => setActiveTab("events")}
+            onOpenServices={() => setActiveTab("services")}
           />
+        ) : null}
+
+        {activeTab === "services" ? (
           <ServiceOverview
             definitionsError={snapshot.definitionsError}
             error={snapshot.error}
@@ -264,22 +314,35 @@ export function App() {
             services={services}
             refreshing={snapshot.refreshing}
             setFilters={setFilters}
-            onSelectService={setSelectedServiceName}
+            onOpenDetails={handleOpenServiceDetails}
+            onSelectService={handleSelectService}
           />
+        ) : null}
+
+        {activeTab === "details" ? (
+          <ServiceInspector
+            definition={selectedDefinition}
+            onServiceNotFound={snapshot.refresh}
+            service={selectedService}
+          />
+        ) : null}
+
+        {activeTab === "commands" ? (
           <CommandsPanel
             discovery={commandDiscovery.discovery}
             submission={commandDiscovery.submission}
             onRefresh={commandDiscovery.refresh}
             onSubmitResetOrigin={commandDiscovery.submitResetOrigin}
           />
-          <RecentActivityPanel eventStream={eventStream} />
-        </section>
+        ) : null}
 
-        <ServiceInspector
-          definition={selectedDefinition}
-          onServiceNotFound={snapshot.refresh}
-          service={selectedService}
-        />
+        {activeTab === "events" ? (
+          <RecentActivityPanel eventStream={eventStream} />
+        ) : null}
+
+        {activeTab === "settings" ? (
+          <ConnectionSettings onRefresh={refreshManagementData} />
+        ) : null}
       </div>
     </ManagementShell>
   )
@@ -361,9 +424,17 @@ function ConnectionSettings({ onRefresh }: { onRefresh: () => void }) {
   }
 
   return (
-    <section className="rounded-lg border border-border bg-card shadow-sm">
+    <section className="flex h-full min-h-0 flex-col overflow-hidden rounded-lg border border-border bg-card shadow-sm">
+      <div className="shrink-0 border-b border-border p-4">
+        <h1 className="text-xl font-semibold tracking-normal text-card-foreground">
+          连接设置
+        </h1>
+        <p className="mt-1 max-w-3xl truncate text-sm text-muted-foreground">
+          配置管理后端 URL 与 Bearer 令牌，并触发一次管理数据刷新。
+        </p>
+      </div>
       <form
-        className="grid gap-5 p-5 lg:grid-cols-[minmax(280px,1fr)_minmax(240px,320px)_auto]"
+        className="grid shrink-0 gap-5 p-5 lg:grid-cols-[minmax(280px,1fr)_minmax(240px,320px)_auto]"
         onSubmit={handleSubmit}
       >
         <label className="grid gap-2">
@@ -423,7 +494,7 @@ function ConnectionSettings({ onRefresh }: { onRefresh: () => void }) {
         </div>
       </form>
 
-      <div className="flex flex-col gap-3 border-t border-border px-5 py-4 md:flex-row md:items-center md:justify-between">
+      <div className="flex shrink-0 flex-col gap-3 border-t border-border px-5 py-4 md:flex-row md:items-center md:justify-between">
         <ConnectionBadge state={connectionState} />
         <p className="text-sm text-muted-foreground">
           HTTP 请求使用 Authorization Bearer 头；浏览器 WebSocket 连接使用
@@ -466,6 +537,192 @@ function ConnectionBadge({ state }: { state: ConnectionState }) {
   )
 }
 
+function OverviewTab({
+  eventStream,
+  lastLoadedAt,
+  services,
+  onOpenEvents,
+  onOpenServices,
+}: {
+  eventStream: ReturnType<typeof useEventStream>
+  lastLoadedAt: string | null
+  services: ServiceStatus[]
+  onOpenEvents: () => void
+  onOpenServices: () => void
+}) {
+  return (
+    <section className="flex h-full min-h-0 flex-col gap-4 overflow-hidden">
+      <HeaderSummary
+        eventStream={eventStream}
+        lastLoadedAt={lastLoadedAt}
+        services={services}
+      />
+      <div className="grid min-h-0 flex-1 gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(360px,0.8fr)]">
+        <OverviewServiceSummary
+          services={services}
+          onOpenServices={onOpenServices}
+        />
+        <OverviewEventsSummary
+          eventStream={eventStream}
+          onOpenEvents={onOpenEvents}
+        />
+      </div>
+    </section>
+  )
+}
+
+function OverviewServiceSummary({
+  services,
+  onOpenServices,
+}: {
+  services: ServiceStatus[]
+  onOpenServices: () => void
+}) {
+  const abnormalServices = services.filter(
+    (service) => service.overall.level !== "ok",
+  )
+  const previewServices = abnormalServices.slice(0, 8)
+
+  return (
+    <section className="flex min-h-0 flex-col rounded-lg border border-border bg-card shadow-sm">
+      <div className="flex items-center justify-between gap-3 border-b border-border p-4">
+        <div className="min-w-0">
+          <h2 className="text-base font-semibold text-card-foreground">
+            异常服务
+          </h2>
+          <p className="mt-1 truncate text-sm text-muted-foreground">
+            当前快照中非正常状态的服务摘要
+          </p>
+        </div>
+        <button
+          type="button"
+          className="inline-flex h-9 shrink-0 items-center gap-2 rounded-md border border-border bg-card px-3 text-sm font-semibold text-card-foreground hover:bg-muted"
+          onClick={onOpenServices}
+        >
+          <Boxes aria-hidden="true" className="size-4" />
+          服务
+        </button>
+      </div>
+
+      {services.length === 0 ? (
+        <CompactEmptyState
+          icon={Server}
+          title="等待服务快照"
+          text="连接后会在这里显示异常服务摘要。"
+        />
+      ) : previewServices.length === 0 ? (
+        <CompactEmptyState
+          icon={CheckCircle2}
+          title="未发现异常服务"
+          text="当前已加载服务均处于正常状态。"
+        />
+      ) : (
+        <div className="min-h-0 flex-1 overflow-y-auto p-4">
+          <div className="grid gap-3 2xl:grid-cols-2">
+            {previewServices.map((service) => (
+              <article
+                key={service.service_name}
+                className="min-w-0 rounded-md border border-border bg-muted/50 p-3"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <h3 className="truncate text-sm font-semibold text-card-foreground">
+                      {service.display_name}
+                    </h3>
+                    <p className="mt-1 truncate text-xs text-muted-foreground">
+                      {service.service_name}
+                    </p>
+                  </div>
+                  <StatusPill level={service.overall.level}>
+                    {formatOverallLevel(service.overall.level)}
+                  </StatusPill>
+                </div>
+                <p className="mt-3 line-clamp-2 text-sm text-muted-foreground">
+                  {formatDisplaySummary(service.overall.reason)}
+                </p>
+              </article>
+            ))}
+          </div>
+        </div>
+      )}
+    </section>
+  )
+}
+
+function OverviewEventsSummary({
+  eventStream,
+  onOpenEvents,
+}: {
+  eventStream: ReturnType<typeof useEventStream>
+  onOpenEvents: () => void
+}) {
+  const events = useAtomValue(recentEventsAtom)
+  const latestEvents = useMemo(() => events.slice(-6).reverse(), [events])
+
+  return (
+    <section className="flex min-h-0 flex-col rounded-lg border border-border bg-card shadow-sm">
+      <div className="flex items-center justify-between gap-3 border-b border-border p-4">
+        <div className="min-w-0">
+          <h2 className="text-base font-semibold text-card-foreground">
+            最近事件摘要
+          </h2>
+          <p className="mt-1 truncate text-sm text-muted-foreground">
+            {eventStream.lastEventAt
+              ? `最新实时事件 ${formatTimestamp(eventStream.lastEventAt)}`
+              : eventStream.loadedRecentAt
+                ? `历史已加载 ${formatTimestamp(eventStream.loadedRecentAt)}`
+                : "等待事件历史"}
+          </p>
+        </div>
+        <button
+          type="button"
+          className="inline-flex h-9 shrink-0 items-center gap-2 rounded-md border border-border bg-card px-3 text-sm font-semibold text-card-foreground hover:bg-muted"
+          onClick={onOpenEvents}
+        >
+          <ListRestart aria-hidden="true" className="size-4" />
+          事件
+        </button>
+      </div>
+
+      {latestEvents.length === 0 ? (
+        <CompactEmptyState
+          icon={ListRestart}
+          title="暂无最近事件"
+          text="事件历史或实时流到达后会显示在这里。"
+        />
+      ) : (
+        <ol className="min-h-0 flex-1 divide-y divide-border overflow-y-auto">
+          {latestEvents.map((event) => (
+            <ActivityEventItem event={event} key={event.id} compact />
+          ))}
+        </ol>
+      )}
+    </section>
+  )
+}
+
+function CompactEmptyState({
+  icon: Icon,
+  text,
+  title,
+}: {
+  icon: LucideIcon
+  text: string
+  title: string
+}) {
+  return (
+    <div className="grid min-h-0 flex-1 place-items-center p-6 text-center">
+      <div className="max-w-sm">
+        <Icon aria-hidden="true" className="mx-auto size-8 text-primary" />
+        <h3 className="mt-3 text-base font-semibold text-card-foreground">
+          {title}
+        </h3>
+        <p className="mt-2 text-sm text-muted-foreground">{text}</p>
+      </div>
+    </div>
+  )
+}
+
 function HeaderSummary({
   eventStream,
   lastLoadedAt,
@@ -491,7 +748,7 @@ function HeaderSummary({
   )
 
   return (
-    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+    <div className="grid shrink-0 gap-3 md:grid-cols-2 xl:grid-cols-5">
       <MetricTile
         icon={Server}
         label="托管服务"
@@ -557,11 +814,11 @@ interface MetricTileProps {
 
 function MetricTile({ icon: Icon, label, value, detail }: MetricTileProps) {
   return (
-    <div className="rounded-lg border border-border bg-card p-4 shadow-sm">
+    <div className="rounded-lg border border-border bg-card p-3 shadow-sm">
       <div className="flex items-start justify-between gap-3">
-        <div>
+        <div className="min-w-0">
           <p className="text-sm font-medium text-muted-foreground">{label}</p>
-          <p className="mt-2 text-3xl font-semibold tracking-normal text-card-foreground">
+          <p className="mt-1 truncate text-2xl font-semibold tracking-normal text-card-foreground">
             {value}
           </p>
         </div>
@@ -569,7 +826,7 @@ function MetricTile({ icon: Icon, label, value, detail }: MetricTileProps) {
           <Icon aria-hidden="true" className="size-4" />
         </span>
       </div>
-      <p className="mt-3 line-clamp-2 text-sm text-muted-foreground">
+      <p className="mt-2 line-clamp-2 text-sm text-muted-foreground">
         {detail}
       </p>
     </div>
@@ -587,6 +844,7 @@ interface ServiceOverviewProps {
   services: ServiceStatus[]
   selectedServiceName: string
   setFilters: (filters: ServiceFilterState) => void
+  onOpenDetails: (serviceName: string) => void
   onSelectService: (serviceName: string) => void
 }
 
@@ -601,18 +859,22 @@ function ServiceOverview({
   services,
   selectedServiceName,
   setFilters,
+  onOpenDetails,
   onSelectService,
 }: ServiceOverviewProps) {
   const categories = useMemo(() => getCategories(services), [services])
+  const selectedService = services.find(
+    (service) => service.service_name === selectedServiceName,
+  )
 
   return (
-    <section className="rounded-lg border border-border bg-card shadow-sm">
-      <div className="flex flex-col gap-3 border-b border-border p-5 md:flex-row md:items-center md:justify-between">
+    <section className="flex h-full min-h-0 flex-col overflow-hidden rounded-lg border border-border bg-card shadow-sm">
+      <div className="flex shrink-0 flex-col gap-3 border-b border-border p-4 md:flex-row md:items-center md:justify-between">
         <div>
           <h1 className="text-xl font-semibold tracking-normal text-card-foreground">
-            运维仪表盘
+            服务列表
           </h1>
-          <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
+          <p className="mt-1 max-w-3xl truncate text-sm text-muted-foreground">
             基于注册表的服务健康视图会分别展示总体、Docker 和 ROS 状态。
           </p>
         </div>
@@ -653,16 +915,24 @@ function ServiceOverview({
       ) : filteredServices.length === 0 ? (
         <NoFilteredServicesState />
       ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[1040px] border-collapse text-left">
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <table className="w-full table-fixed border-collapse text-left">
+            <colgroup>
+              <col className="w-[30%]" />
+              <col className="w-[14%]" />
+              <col className="w-[17%]" />
+              <col className="w-[20%]" />
+              <col className="w-[9%]" />
+              <col className="w-[10%]" />
+            </colgroup>
             <thead>
-              <tr className="border-b border-border bg-muted text-xs uppercase text-muted-foreground">
-                <th className="px-5 py-3 font-semibold">服务</th>
-                <th className="px-5 py-3 font-semibold">类别</th>
-                <th className="px-5 py-3 font-semibold">总体</th>
-                <th className="px-5 py-3 font-semibold">Docker</th>
-                <th className="px-5 py-3 font-semibold">ROS</th>
-                <th className="px-5 py-3 font-semibold">风险</th>
+              <tr className="sticky top-0 z-10 border-b border-border bg-muted text-xs uppercase text-muted-foreground">
+                <th className="px-4 py-3 font-semibold">服务</th>
+                <th className="px-4 py-3 font-semibold">总体</th>
+                <th className="px-4 py-3 font-semibold">Docker</th>
+                <th className="px-4 py-3 font-semibold">ROS</th>
+                <th className="px-4 py-3 font-semibold">风险</th>
+                <th className="px-4 py-3 text-right font-semibold">详情</th>
               </tr>
             </thead>
             <tbody>
@@ -672,12 +942,22 @@ function ServiceOverview({
                   service={service}
                   selected={service.service_name === selectedServiceName}
                   onSelect={() => onSelectService(service.service_name)}
+                  onOpenDetails={() => onOpenDetails(service.service_name)}
                 />
               ))}
             </tbody>
           </table>
         </div>
       )}
+
+      <SelectedServiceSummary
+        service={selectedService ?? null}
+        onOpenDetails={
+          selectedService
+            ? () => onOpenDetails(selectedService.service_name)
+            : undefined
+        }
+      />
     </section>
   )
 }
@@ -704,7 +984,7 @@ function ServiceFilterBar({
   onUpdate,
 }: ServiceFiltersProps) {
   return (
-    <div className="grid gap-3 border-b border-border p-4 lg:grid-cols-[1fr_auto] lg:items-end">
+    <div className="grid shrink-0 gap-3 border-b border-border p-3 lg:grid-cols-[1fr_auto] lg:items-end">
       <div className="grid gap-3 sm:grid-cols-3">
         <FilterSelect
           disabled={disabled}
@@ -791,7 +1071,7 @@ function FilterSelect({
         {label}
       </span>
       <select
-        className="h-10 rounded-md border border-input bg-card px-3 text-sm font-medium text-card-foreground outline-none transition focus:border-ring focus:ring-2 focus:ring-ring/20 disabled:cursor-not-allowed disabled:opacity-60"
+        className="h-9 rounded-md border border-input bg-card px-3 text-sm font-medium text-card-foreground outline-none transition focus:border-ring focus:ring-2 focus:ring-ring/20 disabled:cursor-not-allowed disabled:opacity-60"
         disabled={disabled}
         value={value}
         onChange={(event) => onChange(event.target.value)}
@@ -804,7 +1084,7 @@ function FilterSelect({
 
 function LoadingServicesState() {
   return (
-    <div className="grid min-h-[260px] place-items-center p-6 text-center">
+    <div className="grid min-h-0 flex-1 place-items-center p-6 text-center">
       <div className="max-w-md">
         <LoaderCircle
           aria-hidden="true"
@@ -824,7 +1104,7 @@ function LoadingServicesState() {
 
 function EmptyServicesState() {
   return (
-    <div className="grid min-h-[220px] place-items-center p-6 text-center">
+    <div className="grid min-h-0 flex-1 place-items-center p-6 text-center">
       <div className="max-w-md">
         <Server aria-hidden="true" className="mx-auto size-8 text-primary" />
         <h2 className="mt-4 text-lg font-semibold text-card-foreground">
@@ -840,7 +1120,7 @@ function EmptyServicesState() {
 
 function NoFilteredServicesState() {
   return (
-    <div className="grid min-h-[220px] place-items-center p-6 text-center">
+    <div className="grid min-h-0 flex-1 place-items-center p-6 text-center">
       <div className="max-w-md">
         <ListFilter aria-hidden="true" className="mx-auto size-8 text-primary" />
         <h2 className="mt-4 text-lg font-semibold text-card-foreground">
@@ -865,7 +1145,7 @@ function ErrorServicesState({
   const Icon = copy.icon
 
   return (
-    <div className="grid min-h-[260px] place-items-center p-6 text-center">
+    <div className="grid min-h-0 flex-1 place-items-center p-6 text-center">
       <div className="max-w-xl">
         <Icon aria-hidden="true" className={cn("mx-auto size-9", copy.iconClass)} />
         <h2 className="mt-4 text-lg font-semibold text-card-foreground">
@@ -908,14 +1188,14 @@ function CommandsPanel({
   const busy = discovery.loading || discovery.refreshing
 
   return (
-    <section className="rounded-lg border border-border bg-card shadow-sm">
-      <div className="flex flex-col gap-3 border-b border-border p-5 md:flex-row md:items-center md:justify-between">
+    <section className="flex h-full min-h-0 flex-col overflow-hidden rounded-lg border border-border bg-card shadow-sm">
+      <div className="flex shrink-0 flex-col gap-3 border-b border-border p-4 md:flex-row md:items-center md:justify-between">
         <div>
           <h2 className="flex items-center gap-2 text-xl font-semibold tracking-normal text-card-foreground">
             <DatabaseZap aria-hidden="true" className="size-5" />
             类型化命令
           </h2>
-          <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
+          <p className="mt-1 max-w-3xl truncate text-sm text-muted-foreground">
             可见命令能力来自 <code>/api/commands</code>；前端只提交已知的类型化载荷。
           </p>
         </div>
@@ -938,7 +1218,7 @@ function CommandsPanel({
           <PanelError error={discovery.error} />
         </div>
       ) : discovery.loading ? (
-        <div className="grid min-h-[180px] place-items-center p-6 text-center">
+        <div className="grid min-h-0 flex-1 place-items-center p-6 text-center">
           <div>
             <LoaderCircle
               aria-hidden="true"
@@ -953,7 +1233,7 @@ function CommandsPanel({
           </div>
         </div>
       ) : discovery.commands.length === 0 ? (
-        <div className="grid min-h-[180px] place-items-center p-6 text-center">
+        <div className="grid min-h-0 flex-1 place-items-center p-6 text-center">
           <div className="max-w-md">
             <DatabaseZap
               aria-hidden="true"
@@ -968,7 +1248,7 @@ function CommandsPanel({
           </div>
         </div>
       ) : (
-        <div className="grid gap-4 p-5 lg:grid-cols-2">
+        <div className="grid min-h-0 flex-1 gap-4 overflow-y-auto p-4 xl:grid-cols-2">
           {discovery.commands.map((command) => (
             <CommandCard
               key={`${command.target}/${command.name}`}
@@ -1048,14 +1328,14 @@ function RecentActivityPanel({
   const latestEvents = useMemo(() => events.slice(-12).reverse(), [events])
 
   return (
-    <section className="rounded-lg border border-border bg-card shadow-sm">
-      <div className="flex flex-col gap-3 border-b border-border p-5 md:flex-row md:items-center md:justify-between">
+    <section className="flex h-full min-h-0 flex-col overflow-hidden rounded-lg border border-border bg-card shadow-sm">
+      <div className="flex shrink-0 flex-col gap-3 border-b border-border p-4 md:flex-row md:items-center md:justify-between">
         <div>
           <h2 className="flex items-center gap-2 text-xl font-semibold tracking-normal text-card-foreground">
             <ListRestart aria-hidden="true" className="size-5" />
             最近活动
           </h2>
-          <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
+          <p className="mt-1 max-w-3xl truncate text-sm text-muted-foreground">
             展示来自 <code>/api/events/recent</code> 和 <code>/ws/events</code>{" "}
             的重启、类型化命令、后端警告和状态流事件。
           </p>
@@ -1071,7 +1351,7 @@ function RecentActivityPanel({
         </div>
       </div>
 
-      <div className="grid gap-3 border-b border-border p-4 md:grid-cols-3">
+      <div className="grid shrink-0 gap-3 border-b border-border p-3 md:grid-cols-3">
         <ActivityMeta
           icon={Activity}
           label="最近事件"
@@ -1112,13 +1392,13 @@ function RecentActivityPanel({
       ) : null}
 
       {eventStream.error ? (
-        <div className="px-5 pt-4">
+        <div className="shrink-0 px-5 pt-4">
           <PanelError error={eventStream.error} />
         </div>
       ) : null}
 
       {latestEvents.length === 0 ? (
-        <div className="grid min-h-[180px] place-items-center p-6 text-center">
+        <div className="grid min-h-0 flex-1 place-items-center p-6 text-center">
           <div className="max-w-md">
             <ListRestart
               aria-hidden="true"
@@ -1133,7 +1413,7 @@ function RecentActivityPanel({
           </div>
         </div>
       ) : (
-        <ol className="divide-y divide-border">
+        <ol className="min-h-0 flex-1 divide-y divide-border overflow-y-auto">
           {latestEvents.map((event) => (
             <ActivityEventItem event={event} key={event.id} />
           ))}
@@ -1165,12 +1445,23 @@ function ActivityMeta({
   )
 }
 
-function ActivityEventItem({ event }: { event: ManagementEvent }) {
+function ActivityEventItem({
+  compact = false,
+  event,
+}: {
+  compact?: boolean
+  event: ManagementEvent
+}) {
   const summary = getEventSummary(event)
   const Icon = summary.icon
 
   return (
-    <li className="grid gap-3 p-4 sm:grid-cols-[auto_1fr_auto] sm:items-start">
+    <li
+      className={cn(
+        "grid gap-3 p-4 sm:grid-cols-[auto_1fr_auto] sm:items-start",
+        compact && "p-3",
+      )}
+    >
       <span
         className={cn(
           "inline-flex size-9 items-center justify-center rounded-md border",
@@ -1181,7 +1472,12 @@ function ActivityEventItem({ event }: { event: ManagementEvent }) {
       </span>
       <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-2">
-          <h3 className="break-words text-sm font-semibold text-card-foreground">
+          <h3
+            className={cn(
+              "text-sm font-semibold text-card-foreground",
+              compact ? "truncate" : "break-words",
+            )}
+          >
             {summary.title}
           </h3>
           <span
@@ -1193,10 +1489,20 @@ function ActivityEventItem({ event }: { event: ManagementEvent }) {
             {summary.badge}
           </span>
         </div>
-        <p className="mt-1 break-words text-sm text-muted-foreground">
+        <p
+          className={cn(
+            "mt-1 text-sm text-muted-foreground",
+            compact ? "line-clamp-2" : "break-words",
+          )}
+        >
           {summary.description}
         </p>
-        <p className="mt-2 break-all text-xs text-muted-foreground">
+        <p
+          className={cn(
+            "mt-2 text-xs text-muted-foreground",
+            compact ? "truncate" : "break-all",
+          )}
+        >
           事件 {event.id}
         </p>
       </div>
@@ -1536,10 +1842,16 @@ function InlineCommandNotice({
 interface ServiceRowProps {
   service: ServiceStatus
   selected: boolean
+  onOpenDetails: () => void
   onSelect: () => void
 }
 
-function ServiceRow({ service, selected, onSelect }: ServiceRowProps) {
+function ServiceRow({
+  service,
+  selected,
+  onOpenDetails,
+  onSelect,
+}: ServiceRowProps) {
   const OverallIcon = overallIcons[service.overall.level]
   const agentIssue =
     service.docker.running && !service.ros.agent_available
@@ -1553,79 +1865,133 @@ function ServiceRow({ service, selected, onSelect }: ServiceRowProps) {
         selected ? "bg-sky-50/70" : "bg-card hover:bg-muted/60",
       )}
     >
-      <td className="px-5 py-4">
+      <td className="px-4 py-3">
         <button
           type="button"
-          className="flex max-w-[280px] flex-col text-left"
+          className="flex w-full min-w-0 flex-col text-left"
           onClick={onSelect}
           aria-pressed={selected}
         >
-          <span className="font-medium text-card-foreground">
+          <span className="truncate font-medium text-card-foreground">
             {service.display_name}
           </span>
-          <span className="mt-1 break-all text-xs text-muted-foreground">
+          <span className="mt-1 truncate text-xs text-muted-foreground">
             {service.service_name}
+          </span>
+          <span className="mt-1 truncate text-xs text-muted-foreground">
+            {service.category} / {service.compose_profile}
           </span>
         </button>
       </td>
-      <td className="px-5 py-4">
-        <span className="text-sm font-medium capitalize text-card-foreground">
-          {service.category}
-        </span>
-        <p className="mt-2 text-xs text-muted-foreground">
-          Profile {service.compose_profile}
-        </p>
-      </td>
-      <td className="px-5 py-4">
+      <td className="px-4 py-3">
         <StatusPill level={service.overall.level}>
           <OverallIcon aria-hidden="true" className="size-3.5" />
           {formatOverallLevel(service.overall.level)}
         </StatusPill>
-        <p className="mt-2 text-xs text-muted-foreground">
+        <p className="mt-2 truncate text-xs text-muted-foreground">
           {formatDisplaySummary(service.overall.reason)}
         </p>
       </td>
-      <td className="px-5 py-4">
-        <div className="flex items-center gap-2">
+      <td className="px-4 py-3">
+        <div className="flex min-w-0 items-center gap-2">
           <Container
             aria-hidden="true"
-            className={cn("size-4", dockerStyles[service.docker.state])}
+            className={cn("size-4 shrink-0", dockerStyles[service.docker.state])}
           />
-          <span className="text-sm font-medium capitalize text-card-foreground">
+          <span className="truncate text-sm font-medium capitalize text-card-foreground">
             {formatDockerState(service.docker.state)}
           </span>
         </div>
-        <p className="mt-2 text-xs text-muted-foreground">
+        <p className="mt-2 truncate text-xs text-muted-foreground">
           运行={formatBoolean(service.docker.running)}
           {service.docker.status ? `，状态 ${service.docker.status}` : ""}
         </p>
-        <p className="mt-1 text-xs text-muted-foreground">
+        <p className="mt-1 truncate text-xs text-muted-foreground">
           重启 {formatRestartCount(service.docker.restart_count)}
         </p>
       </td>
-      <td className="px-5 py-4">
-        <div className="flex items-center gap-2">
+      <td className="px-4 py-3">
+        <div className="flex min-w-0 items-center gap-2">
           {service.ros.agent_available ? (
-            <Wifi aria-hidden="true" className="size-4 text-emerald-700" />
+            <Wifi
+              aria-hidden="true"
+              className="size-4 shrink-0 text-emerald-700"
+            />
           ) : (
-            <WifiOff aria-hidden="true" className="size-4 text-amber-700" />
+            <WifiOff
+              aria-hidden="true"
+              className="size-4 shrink-0 text-amber-700"
+            />
           )}
-          <span className="text-sm font-medium text-card-foreground">
+          <span className="truncate text-sm font-medium text-card-foreground">
             {service.ros.agent_available ? "代理可用" : "代理不可用"}
           </span>
         </div>
-        <p className="mt-2 text-xs text-muted-foreground">
+        <p className="mt-2 truncate text-xs text-muted-foreground">
           {formatDisplaySummary(agentIssue)}
         </p>
-        <p className="mt-1 text-xs text-muted-foreground">
+        <p className="mt-1 truncate text-xs text-muted-foreground">
           {service.ros.expected_nodes.length} 个节点，{service.ros.topics.length}{" "}
           个话题
         </p>
       </td>
-      <td className="px-5 py-4">
+      <td className="px-4 py-3">
         <RiskPill riskLevel={service.risk_level} />
       </td>
+      <td className="px-4 py-3 text-right">
+        <button
+          type="button"
+          className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-card px-2 text-xs font-semibold text-card-foreground hover:bg-muted"
+          onClick={onOpenDetails}
+        >
+          <Gauge aria-hidden="true" className="size-3.5" />
+          详情
+        </button>
+      </td>
     </tr>
+  )
+}
+
+function SelectedServiceSummary({
+  service,
+  onOpenDetails,
+}: {
+  service: ServiceStatus | null
+  onOpenDetails?: () => void
+}) {
+  return (
+    <div className="flex shrink-0 items-center justify-between gap-3 border-t border-border bg-muted/40 px-4 py-3">
+      <div className="min-w-0">
+        {service ? (
+          <>
+            <p className="truncate text-sm font-semibold text-card-foreground">
+              已选：{service.display_name}
+            </p>
+            <p className="mt-1 truncate text-xs text-muted-foreground">
+              {service.service_name} / {formatDisplaySummary(service.overall.reason)}
+            </p>
+          </>
+        ) : (
+          <>
+            <p className="text-sm font-semibold text-card-foreground">
+              尚未选择服务
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              点击服务行后可查看当前选择摘要。
+            </p>
+          </>
+        )}
+      </div>
+      <button
+        type="button"
+        className="inline-flex h-9 shrink-0 items-center gap-2 rounded-md border border-primary bg-primary px-3 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
+        disabled={!service || !onOpenDetails}
+        onClick={onOpenDetails}
+      >
+        <Gauge aria-hidden="true" className="size-4" />
+        打开详情
+      </button>
+    </div>
   )
 }
 
@@ -1676,6 +2042,7 @@ function ServiceInspector({
     stderr: true,
     timestamps: true,
   })
+  const [activeDetailTab, setActiveDetailTab] = useState<DetailTab>("status")
   const diagnostics = useSelectedServiceDiagnostics(
     service?.service_name ?? null,
     logOptions,
@@ -1684,25 +2051,28 @@ function ServiceInspector({
   const detailService = diagnostics.detail.data ?? service
 
   return (
-    <aside className="space-y-5">
-      <section className="rounded-lg border border-border bg-card p-5 shadow-sm">
+    <aside className="flex h-full min-h-0 flex-col overflow-hidden rounded-lg border border-border bg-card shadow-sm">
+      <section className="shrink-0 border-b border-border p-4">
         {detailService ? (
           <>
             <div className="flex items-start justify-between gap-4">
-              <div>
+              <div className="min-w-0">
                 <p className="text-sm font-medium text-muted-foreground">
                   当前服务
                 </p>
-                <h2 className="mt-1 text-2xl font-semibold tracking-normal text-card-foreground">
+                <h2 className="mt-1 truncate text-2xl font-semibold tracking-normal text-card-foreground">
                   {detailService.display_name}
                 </h2>
+                <p className="mt-1 truncate text-xs text-muted-foreground">
+                  {detailService.service_name}
+                </p>
               </div>
               <StatusPill level={detailService.overall.level}>
-                {detailService.overall.level}
+                {formatOverallLevel(detailService.overall.level)}
               </StatusPill>
             </div>
 
-            <dl className="mt-5 grid grid-cols-2 gap-3 text-sm">
+            <dl className="mt-4 grid grid-cols-4 gap-3 text-sm">
               <DetailItem label="逻辑名称" value={detailService.service_name} />
               <DetailItem label="Profile" value={detailService.compose_profile} />
               <DetailItem label="类别" value={detailService.category} />
@@ -1757,76 +2127,117 @@ function ServiceInspector({
         )}
       </section>
 
-      <section className="rounded-lg border border-border bg-card p-5 shadow-sm">
-        <h3 className="flex items-center gap-2 text-base font-semibold text-card-foreground">
-          <Gauge aria-hidden="true" className="size-4" />
-          状态层
-        </h3>
-        <div className="mt-4 space-y-3">
-          <LayerLine
-            icon={Activity}
-            label="总体"
-            value={
-              detailService
-              ? `${formatOverallLevel(detailService.overall.level)}：${formatDisplaySummary(detailService.overall.reason)}`
-                : "未选择服务"
-            }
+      <nav
+        aria-label="服务详情"
+        className="flex shrink-0 flex-wrap gap-2 border-b border-border p-3"
+        role="tablist"
+      >
+        {detailTabs.map((tab) => {
+          const active = tab.id === activeDetailTab
+
+          return (
+            <button
+              key={tab.id}
+              type="button"
+              className={cn(
+                "inline-flex h-9 items-center gap-2 rounded-md border px-3 text-sm font-medium",
+                active
+                  ? "border-primary bg-primary text-primary-foreground"
+                  : "border-border bg-card text-muted-foreground hover:bg-muted hover:text-card-foreground",
+              )}
+              aria-selected={active}
+              role="tab"
+              onClick={() => setActiveDetailTab(tab.id)}
+            >
+              <tab.icon aria-hidden="true" className="size-4" />
+              {tab.label}
+            </button>
+          )
+        })}
+      </nav>
+
+      <div className="min-h-0 flex-1 overflow-y-auto p-4">
+        {activeDetailTab === "status" ? (
+          <StatusLayersPanel service={detailService} />
+        ) : null}
+
+        {activeDetailTab === "docker" ? (
+          <DockerDetailPanel service={detailService} />
+        ) : null}
+
+        {activeDetailTab === "ros" ? (
+          <RosDetailPanel definition={definition} service={detailService} />
+        ) : null}
+
+        {activeDetailTab === "logs" ? (
+          <LogsPanel
+            logs={diagnostics.logs.data}
+            options={logOptions}
+            error={diagnostics.logs.error}
+            loading={diagnostics.logs.loading}
+            refreshing={diagnostics.logs.refreshing}
+            loadedAt={diagnostics.logs.loadedAt}
+            service={detailService}
+            onRefresh={diagnostics.refreshLogs}
+            onUpdateOptions={setLogOptions}
           />
-          <LayerLine
-            icon={Container}
-            label="Docker"
-            value={
-              detailService
-                ? formatDockerSummary(detailService)
-                : "等待后端状态"
-            }
+        ) : null}
+
+        {activeDetailTab === "stats" ? (
+          <StatsPanel
+            error={diagnostics.stats.error}
+            loadedAt={diagnostics.stats.loadedAt}
+            loading={diagnostics.stats.loading}
+            refreshing={diagnostics.stats.refreshing}
+            stats={diagnostics.stats.data}
+            service={detailService}
+            onRefresh={diagnostics.refreshStats}
           />
-          <LayerLine
-            icon={RadioTower}
-            label="ROS"
-            value={
-              detailService
-                ? formatRosSummary(detailService)
-                : "等待后端状态"
-            }
+        ) : null}
+
+        {activeDetailTab === "restart" ? (
+          <HardRestartPanel
+            error={diagnostics.restart.error}
+            response={diagnostics.restart.response}
+            service={detailService}
+            submitting={diagnostics.restart.submitting}
+            onRestart={diagnostics.restartHard}
           />
-        </div>
-      </section>
-
-      <DockerDetailPanel service={detailService} />
-
-      <RosDetailPanel definition={definition} service={detailService} />
-
-      <LogsPanel
-        logs={diagnostics.logs.data}
-        options={logOptions}
-        error={diagnostics.logs.error}
-        loading={diagnostics.logs.loading}
-        refreshing={diagnostics.logs.refreshing}
-        loadedAt={diagnostics.logs.loadedAt}
-        service={detailService}
-        onRefresh={diagnostics.refreshLogs}
-        onUpdateOptions={setLogOptions}
-      />
-
-      <StatsPanel
-        error={diagnostics.stats.error}
-        loadedAt={diagnostics.stats.loadedAt}
-        loading={diagnostics.stats.loading}
-        refreshing={diagnostics.stats.refreshing}
-        stats={diagnostics.stats.data}
-        service={detailService}
-        onRefresh={diagnostics.refreshStats}
-      />
-
-      <HardRestartPanel
-        error={diagnostics.restart.error}
-        response={diagnostics.restart.response}
-        service={detailService}
-        submitting={diagnostics.restart.submitting}
-        onRestart={diagnostics.restartHard}
-      />
+        ) : null}
+      </div>
     </aside>
+  )
+}
+
+function StatusLayersPanel({ service }: { service: ServiceStatus | null }) {
+  return (
+    <section className="rounded-lg border border-border bg-card p-5 shadow-sm">
+      <h3 className="flex items-center gap-2 text-base font-semibold text-card-foreground">
+        <Gauge aria-hidden="true" className="size-4" />
+        状态层
+      </h3>
+      <div className="mt-4 space-y-3">
+        <LayerLine
+          icon={Activity}
+          label="总体"
+          value={
+            service
+              ? `${formatOverallLevel(service.overall.level)}：${formatDisplaySummary(service.overall.reason)}`
+              : "未选择服务"
+          }
+        />
+        <LayerLine
+          icon={Container}
+          label="Docker"
+          value={service ? formatDockerSummary(service) : "等待后端状态"}
+        />
+        <LayerLine
+          icon={RadioTower}
+          label="ROS"
+          value={service ? formatRosSummary(service) : "等待后端状态"}
+        />
+      </div>
+    </section>
   )
 }
 
@@ -1834,7 +2245,7 @@ function DetailItem({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-md border border-border bg-muted/60 p-3">
       <dt className="text-xs font-medium text-muted-foreground">{label}</dt>
-      <dd className="mt-1 break-words font-semibold capitalize text-card-foreground">
+      <dd className="mt-1 truncate font-semibold capitalize text-card-foreground">
         {value}
       </dd>
     </div>
@@ -1943,7 +2354,7 @@ function RosDetailPanel({
         title="ROS 详情"
       />
       {ros ? (
-        <div className="mt-4 space-y-4">
+        <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(260px,0.8fr)_minmax(0,1.2fr)]">
           <dl className="grid grid-cols-2 gap-3 text-sm">
             <DetailItem
               label="代理"
@@ -1957,24 +2368,21 @@ function RosDetailPanel({
             />
           </dl>
 
-          <div>
-            <h4 className="text-sm font-semibold text-card-foreground">
-              预期节点
-            </h4>
-            {ros.expected_nodes.length > 0 ? (
-              <div className="mt-2 space-y-2">
-                {ros.expected_nodes.map((node) => (
+          <div className="grid gap-4 xl:grid-cols-3">
+            <RosListPanel title="预期节点">
+              {ros.expected_nodes.length > 0 ? (
+                ros.expected_nodes.map((node) => (
                   <div
                     key={node.name}
                     className="rounded-md border border-border bg-muted/60 p-3 text-sm"
                   >
-                    <div className="flex items-center justify-between gap-3">
-                      <span className="break-all font-medium text-card-foreground">
+                    <div className="flex min-w-0 items-center justify-between gap-3">
+                      <span className="truncate font-medium text-card-foreground">
                         {node.name}
                       </span>
                       <span
                         className={cn(
-                          "rounded-md border px-2 py-1 text-xs font-semibold",
+                          "shrink-0 rounded-md border px-2 py-1 text-xs font-semibold",
                           node.present
                             ? "border-emerald-200 bg-emerald-50 text-emerald-800"
                             : "border-amber-200 bg-amber-50 text-amber-900",
@@ -1983,83 +2391,90 @@ function RosDetailPanel({
                         {node.present ? "存在" : "缺失"}
                       </span>
                     </div>
-                    <p className="mt-2 text-xs text-muted-foreground">
+                    <p className="mt-2 truncate text-xs text-muted-foreground">
                       最近出现 {formatNullableTimestamp(node.last_seen)}
                     </p>
                   </div>
-                ))}
-              </div>
-            ) : (
-              <EmptyPanelText text="该服务未返回预期节点。" />
-            )}
-          </div>
+                ))
+              ) : (
+                <EmptyPanelText text="该服务未返回预期节点。" />
+              )}
+            </RosListPanel>
 
-          <div>
-            <h4 className="text-sm font-semibold text-card-foreground">
-              话题
-            </h4>
-            {ros.topics.length > 0 ? (
-              <div className="mt-2 space-y-2">
-                {ros.topics.map((topic) => (
+            <RosListPanel title="话题">
+              {ros.topics.length > 0 ? (
+                ros.topics.map((topic) => (
                   <div
                     key={`${topic.name}:${topic.resolved_name}`}
                     className="rounded-md border border-border bg-muted/60 p-3 text-sm"
                   >
-                    <div className="flex items-center justify-between gap-3">
-                      <span className="break-all font-medium text-card-foreground">
+                    <div className="flex min-w-0 items-center justify-between gap-3">
+                      <span className="truncate font-medium text-card-foreground">
                         {topic.resolved_name}
                       </span>
-                      <span className="text-xs font-semibold text-muted-foreground">
+                      <span className="shrink-0 text-xs font-semibold text-muted-foreground">
                         {topic.present ? "存在" : "缺失"}
                       </span>
                     </div>
-                    <p className="mt-2 text-xs text-muted-foreground">
+                    <p className="mt-2 truncate text-xs text-muted-foreground">
                       {formatEndpointRole(topic.required_endpoint)}，发布者{" "}
                       {topic.publisher_count}，订阅者{" "}
                       {topic.subscriber_count}
                     </p>
                   </div>
-                ))}
-              </div>
-            ) : (
-              <EmptyPanelText text="该服务未返回话题观测结果。" />
-            )}
-          </div>
+                ))
+              ) : (
+                <EmptyPanelText text="该服务未返回话题观测结果。" />
+              )}
+            </RosListPanel>
 
-          <div>
-            <h4 className="text-sm font-semibold text-card-foreground">
-              诊断
-            </h4>
-            {ros.diagnostics.length > 0 ? (
-              <div className="mt-2 space-y-2">
-                {ros.diagnostics.map((diagnostic) => (
+            <RosListPanel title="诊断">
+              {ros.diagnostics.length > 0 ? (
+                ros.diagnostics.map((diagnostic) => (
                   <div
                     key={`${diagnostic.name}:${diagnostic.hardware_id}`}
                     className="rounded-md border border-border bg-muted/60 p-3 text-sm"
                   >
-                    <div className="flex items-center justify-between gap-3">
-                      <span className="break-all font-medium text-card-foreground">
+                    <div className="flex min-w-0 items-center justify-between gap-3">
+                      <span className="truncate font-medium text-card-foreground">
                         {diagnostic.name}
                       </span>
                       <StatusPill level={diagnostic.level}>
                         {formatOverallLevel(diagnostic.level)}
                       </StatusPill>
                     </div>
-                    <p className="mt-2 text-xs text-muted-foreground">
+                    <p className="mt-2 line-clamp-2 text-xs text-muted-foreground">
                       {diagnostic.message}
                     </p>
                   </div>
-                ))}
-              </div>
-            ) : (
-              <EmptyPanelText text="该服务未返回 ROS 诊断。" />
-            )}
+                ))
+              ) : (
+                <EmptyPanelText text="该服务未返回 ROS 诊断。" />
+              )}
+            </RosListPanel>
           </div>
         </div>
       ) : (
         <EmptyPanelText text="选择已注册服务后加载 ROS 诊断。" />
       )}
     </section>
+  )
+}
+
+function RosListPanel({
+  children,
+  title,
+}: {
+  children: ReactNode
+  title: string
+}) {
+  return (
+    <div className="min-h-0 rounded-md border border-border bg-card p-3">
+      <h4 className="text-sm font-semibold text-card-foreground">{title}</h4>
+      <div className="mt-2 max-h-[420px] space-y-2 overflow-y-auto">
+        {children}
+      </div>
+    </div>
   )
 }
 
@@ -2159,7 +2574,7 @@ function LogsPanel({
         <code>{service?.service_name ?? "未选择服务"}</code> 的非结构化 Docker 容器输出
         {loadedAt ? `，加载时间 ${formatTimestamp(loadedAt)}` : ""}。
       </p>
-      <pre className="mt-3 max-h-[360px] overflow-auto rounded-md border border-zinc-800 bg-zinc-950 p-3 text-xs leading-relaxed text-zinc-100">
+      <pre className="mt-3 h-[420px] overflow-auto rounded-md border border-zinc-800 bg-zinc-950 p-3 text-xs leading-relaxed text-zinc-100">
         {logs && logs.lines.length > 0
           ? logs.lines.join("\n")
           : service
