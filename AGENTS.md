@@ -45,3 +45,13 @@ User-facing frontend UI copy must be Simplified Chinese by default. Keep code
 identifiers, backend DTO fields, API paths, enum values, service names, command
 names, package metadata, and generated/tool output in their required technical
 forms unless a display formatter explicitly translates them for operators.
+
+When frontend debugging indicates a probable backend issue or API contract
+drift, coordinate with backend developers through the shared `.handoff/`
+directory using the `$fullstack-handoff` workflow. Create frontend-to-backend
+`issue`, `request`, or `question` items in `.handoff/inbox/`, preserve observed
+requests/responses and frontend impact in the item body, and let the receiver
+move work through `accepted/`, `needs-info/`, and `ready-for-verify/`.
+Frontend-side defensive handling must stay separate from backend issue
+resolution. Do not create new backend coordination notes under
+`backend-docs/issues/`; existing notes should be migrated into `.handoff/`.

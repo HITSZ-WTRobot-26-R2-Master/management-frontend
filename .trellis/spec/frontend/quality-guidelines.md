@@ -31,6 +31,9 @@ Use bounded non-interactive commands for verification in agent sessions. Do not 
 - Use structured backend error `code` values for user-facing error branches.
 - Preserve management safety boundaries in UI design and state shape.
 - Keep initial pages functional dashboard views, not landing or marketing pages.
+- Use `.handoff/` with the `$fullstack-handoff` workflow for frontend/backend
+  coordination. Do not create new backend issue notes under
+  `backend-docs/issues/`; migrate existing notes into handoff items.
 
 ## Testing Requirements
 
@@ -55,3 +58,5 @@ behavior; do not introduce browser-heavy test dependencies for pure logic.
 - Are shadcn/ui generated files produced through the CLI?
 - Do TypeScript, build, lint, and tests pass?
 - Are backend docs and frontend specs updated when contracts or conventions change?
+- If frontend debugging found backend issue or API drift, is there a
+  frontend-to-backend item in `.handoff/inbox/`?
