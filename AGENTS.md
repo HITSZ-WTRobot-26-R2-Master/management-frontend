@@ -40,3 +40,8 @@ logical `service_name` values for service paths, and preserve the documented
 management safety boundary: no arbitrary shell command UI, Docker exec/API
 explorer, arbitrary container names, arbitrary command strings, direct ROS CLI,
 or arbitrary JSON payload editors.
+
+User-facing frontend UI copy must be Simplified Chinese by default. Keep code
+identifiers, backend DTO fields, API paths, enum values, service names, command
+names, package metadata, and generated/tool output in their required technical
+forms unless a display formatter explicitly translates them for operators.

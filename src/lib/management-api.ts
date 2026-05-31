@@ -227,7 +227,7 @@ export class ManagementApiClient {
     if (!validator(payload)) {
       throw new ManagementApiError({
         code: "request_failed",
-        message: "backend response did not match the expected management contract",
+        message: "后端响应不符合预期的管理接口契约",
       })
     }
 
@@ -272,10 +272,10 @@ export function buildManagementWebSocketUrl(baseUrl: string, token: string) {
     url.protocol = "ws:"
   } else if (url.protocol === "https:") {
     url.protocol = "wss:"
-  } else {
+    } else {
     throw new ManagementApiError({
       code: "request_failed",
-      message: "management backend URL must use http or https",
+      message: "管理后端 URL 必须使用 http 或 https",
     })
   }
 
@@ -300,7 +300,7 @@ export function getApiError(error: unknown): ApiError {
   if (error instanceof TypeError) {
     return {
       code: "request_failed",
-      message: "management backend is unreachable from this browser",
+      message: "当前浏览器无法访问管理后端",
     }
   }
 
@@ -313,7 +313,7 @@ export function getApiError(error: unknown): ApiError {
 
   return {
     code: "request_failed",
-    message: "management request failed",
+    message: "管理请求失败",
   }
 }
 
@@ -339,13 +339,13 @@ export function parseApiError(payload: unknown, status: number): ApiError {
   if (status === 401) {
     return {
       code: "auth_required",
-      message: "authentication is required for the management backend",
+      message: "管理后端需要认证",
     }
   }
 
   return {
     code: "request_failed",
-    message: `management backend request failed with HTTP ${status}`,
+    message: `管理后端请求失败，HTTP ${status}`,
   }
 }
 

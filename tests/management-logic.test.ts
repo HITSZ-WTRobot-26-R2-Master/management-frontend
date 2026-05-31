@@ -38,14 +38,14 @@ describe("management API errors", () => {
   test("maps unauthenticated non-contract responses to auth_required", () => {
     expect(parseApiError(null, 401)).toEqual({
       code: "auth_required",
-      message: "authentication is required for the management backend",
+      message: "管理后端需要认证",
     })
   })
 
   test("maps malformed error payloads to a request_failed fallback", () => {
     expect(parseApiError({ message: "missing code" }, 503)).toEqual({
       code: "request_failed",
-      message: "management backend request failed with HTTP 503",
+      message: "管理后端请求失败，HTTP 503",
     })
   })
 })
@@ -109,7 +109,7 @@ describe("status presentation", () => {
 
     expect(service.overall.level).toBe("warning")
     expect(formatRosSummary(service)).toBe(
-      "unknown, agent unavailable: Docker is running; ROS agent is unavailable",
+      "未知, 代理不可用: Docker 正在运行；ROS 代理不可用",
     )
   })
 })

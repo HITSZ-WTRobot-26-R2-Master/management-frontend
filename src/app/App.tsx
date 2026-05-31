@@ -67,6 +67,9 @@ import {
 import type {
   ApiError,
   CommandDefinition,
+  CommandResult,
+  CommandState,
+  CommandTransport,
   CommandResponse,
   CommandRequestedPayload,
   ConnectionState,
@@ -74,6 +77,8 @@ import type {
   DockerState,
   ManagementEvent,
   OverallLevel,
+  RestartMode,
+  RestartResult,
   RestartRequestedPayload,
   RestartResponse,
   ServiceDefinition,
@@ -119,6 +124,31 @@ const riskStyles: Record<ServiceRiskLevel, string> = {
   critical: "border-red-300 bg-red-100 text-red-900",
 }
 
+const overallLabels: Record<OverallLevel, string> = {
+  ok: "正常",
+  warning: "警告",
+  error: "错误",
+  unknown: "未知",
+}
+
+const riskLabels: Record<ServiceRiskLevel, string> = {
+  low: "低",
+  medium: "中",
+  high: "高",
+  critical: "严重",
+}
+
+const dockerStateLabels: Record<DockerState, string> = {
+  running: "运行中",
+  created: "已创建",
+  restarting: "重启中",
+  paused: "已暂停",
+  exited: "已退出",
+  dead: "已停止",
+  missing: "缺失",
+  unknown: "未知",
+}
+
 const dockerStyles: Record<DockerState, string> = {
   running: "text-emerald-700",
   created: "text-zinc-700",
@@ -162,16 +192,16 @@ const connectionStyles: Record<ConnectionStatus, string> = {
 }
 
 const connectionLabels: Record<ConnectionStatus, string> = {
-  idle: "Not checked",
-  checking: "Checking",
-  connected: "Connected",
-  stream_connecting: "Connecting stream",
-  live: "Live events",
-  reconnecting: "Reconnecting",
-  fallback: "REST fallback",
-  auth_required: "Token required",
-  auth_invalid: "Invalid token",
-  error: "Connection error",
+  idle: "未检查",
+  checking: "检查中",
+  connected: "已连接",
+  stream_connecting: "正在连接事件流",
+  live: "实时事件",
+  reconnecting: "正在重连",
+  fallback: "REST 回退",
+  auth_required: "需要令牌",
+  auth_invalid: "令牌无效",
+  error: "连接错误",
 }
 
 const overallIcons: Record<OverallLevel, LucideIcon> = {
@@ -263,7 +293,7 @@ function ConnectionSettings({ onRefresh }: { onRefresh: () => void }) {
       setConnectionState(toConnectionState("error"))
       setLatestError({
         code: "request_failed",
-        message: "management backend base URL is required",
+        message: "管理后端基础 URL 不能为空",
       })
       return
     }
@@ -274,7 +304,7 @@ function ConnectionSettings({ onRefresh }: { onRefresh: () => void }) {
       setConnectionState(toConnectionState("error"))
       setLatestError({
         code: "request_failed",
-        message: "management backend base URL must be a valid URL",
+        message: "管理后端基础 URL 必须是有效 URL",
       })
       return
     }
@@ -320,7 +350,7 @@ function ConnectionSettings({ onRefresh }: { onRefresh: () => void }) {
         <label className="grid gap-2">
           <span className="flex items-center gap-2 text-sm font-semibold text-card-foreground">
             <Link2 aria-hidden="true" className="size-4 text-primary" />
-            Backend base URL
+            后端基础 URL
           </span>
           <input
             className="h-10 rounded-md border border-input bg-card px-3 text-sm text-card-foreground outline-none transition focus:border-ring focus:ring-2 focus:ring-ring/20"
@@ -335,7 +365,7 @@ function ConnectionSettings({ onRefresh }: { onRefresh: () => void }) {
         <label className="grid gap-2">
           <span className="flex items-center gap-2 text-sm font-semibold text-card-foreground">
             <KeyRound aria-hidden="true" className="size-4 text-primary" />
-            Bearer token
+            Bearer 令牌
           </span>
           <input
             className="h-10 rounded-md border border-input bg-card px-3 text-sm text-card-foreground outline-none transition focus:border-ring focus:ring-2 focus:ring-ring/20"
@@ -360,7 +390,7 @@ function ConnectionSettings({ onRefresh }: { onRefresh: () => void }) {
             ) : (
               <PlugZap aria-hidden="true" className="size-4" />
             )}
-            Connect
+            连接
           </button>
           <button
             type="button"
@@ -369,7 +399,7 @@ function ConnectionSettings({ onRefresh }: { onRefresh: () => void }) {
             disabled={!hasToken && tokenDraft.length === 0}
           >
             <ShieldAlert aria-hidden="true" className="size-4" />
-            Clear
+            清除
           </button>
         </div>
       </form>
@@ -377,8 +407,8 @@ function ConnectionSettings({ onRefresh }: { onRefresh: () => void }) {
       <div className="flex flex-col gap-3 border-t border-border px-5 py-4 md:flex-row md:items-center md:justify-between">
         <ConnectionBadge state={connectionState} />
         <p className="text-sm text-muted-foreground">
-          HTTP requests use the Authorization bearer header; browser WebSocket
-          connections use a token query parameter.
+          HTTP 请求使用 Authorization Bearer 头；浏览器 WebSocket 连接使用
+          token 查询参数。
         </p>
       </div>
     </section>
@@ -446,31 +476,31 @@ function HeaderSummary({
     <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
       <MetricTile
         icon={Server}
-        label="Managed services"
+        label="托管服务"
         value={services.length.toString()}
-        detail={`${definitions.length} registry definitions loaded`}
+        detail={`已加载 ${definitions.length} 个注册定义`}
       />
       <MetricTile
         icon={CheckCircle2}
-        label="OK / warning"
+        label="正常 / 警告"
         value={`${counts.ok} / ${counts.warning}`}
-        detail={`${counts.error} error, ${counts.unknown} unknown`}
+        detail={`${counts.error} 个错误，${counts.unknown} 个未知`}
       />
       <MetricTile
         icon={TerminalSquare}
-        label="Commands"
+        label="命令"
         value={commands.length.toString()}
-        detail="visible typed command definitions"
+        detail="可见的类型化命令定义"
       />
       <MetricTile
         icon={latestError || eventStream.error ? AlertTriangle : Activity}
-        label="Event stream"
+        label="事件流"
         value={connectionLabels[connectionState.status]}
         detail={
           eventStream.lastEventAt
-            ? `live ${formatTimestamp(eventStream.lastEventAt)}`
+            ? `实时 ${formatTimestamp(eventStream.lastEventAt)}`
             : eventStream.fallbackRefreshAt
-              ? `REST fallback ${formatTimestamp(
+              ? `REST 回退 ${formatTimestamp(
                   eventStream.fallbackRefreshAt,
                 )}`
               : eventStream.error
@@ -478,26 +508,26 @@ function HeaderSummary({
                 : latestError
                   ? formatApiError(latestError)
                   : eventStream.loadedRecentAt
-                    ? `recent loaded ${formatTimestamp(
+                    ? `最近事件已加载 ${formatTimestamp(
                         eventStream.loadedRecentAt,
                       )}`
                     : lastLoadedAt
-                      ? `snapshot ${formatTimestamp(lastLoadedAt)}`
-                      : "awaiting first load"
+                      ? `快照 ${formatTimestamp(lastLoadedAt)}`
+                      : "等待首次加载"
         }
       />
       <MetricTile
         icon={ListRestart}
-        label="Recent events"
+        label="最近事件"
         value={events.length.toString()}
         detail={
           eventStream.loadedRecentAt
-            ? `loaded ${formatTimestamp(eventStream.loadedRecentAt)}`
+            ? `已加载 ${formatTimestamp(eventStream.loadedRecentAt)}`
             : latestError
               ? formatApiError(latestError)
               : lastLoadedAt
-                ? `loaded ${formatTimestamp(lastLoadedAt)}`
-                : "awaiting first load"
+                ? `已加载 ${formatTimestamp(lastLoadedAt)}`
+                : "等待首次加载"
         }
       />
     </div>
@@ -566,16 +596,15 @@ function ServiceOverview({
       <div className="flex flex-col gap-3 border-b border-border p-5 md:flex-row md:items-center md:justify-between">
         <div>
           <h1 className="text-xl font-semibold tracking-normal text-card-foreground">
-            Operations Dashboard
+            运维仪表盘
           </h1>
           <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
-            Registry-scoped service health keeps overall, Docker, and ROS
-            status semantics separate.
+            基于注册表的服务健康视图会分别展示总体、Docker 和 ROS 状态。
           </p>
         </div>
         <span className="inline-flex w-fit items-center gap-2 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-800">
           <ShieldCheck aria-hidden="true" className="size-4" />
-          Backend allowlist only
+          仅限后端白名单
         </span>
       </div>
 
@@ -594,10 +623,9 @@ function ServiceOverview({
         <InlineNotice
           icon={AlertTriangle}
           tone="warning"
-          title="Service definitions unavailable"
+          title="服务定义不可用"
         >
-          The status snapshot still loaded from <code>/api/services</code>.
-          Definition metadata could not be loaded:{" "}
+          状态快照仍已从 <code>/api/services</code> 加载。定义元数据加载失败：{" "}
           {formatApiError(definitionsError)}
         </InlineNotice>
       ) : null}
@@ -615,12 +643,12 @@ function ServiceOverview({
           <table className="w-full min-w-[1040px] border-collapse text-left">
             <thead>
               <tr className="border-b border-border bg-muted text-xs uppercase text-muted-foreground">
-                <th className="px-5 py-3 font-semibold">Service</th>
-                <th className="px-5 py-3 font-semibold">Category</th>
-                <th className="px-5 py-3 font-semibold">Overall</th>
+                <th className="px-5 py-3 font-semibold">服务</th>
+                <th className="px-5 py-3 font-semibold">类别</th>
+                <th className="px-5 py-3 font-semibold">总体</th>
                 <th className="px-5 py-3 font-semibold">Docker</th>
                 <th className="px-5 py-3 font-semibold">ROS</th>
-                <th className="px-5 py-3 font-semibold">Risk</th>
+                <th className="px-5 py-3 font-semibold">风险</th>
               </tr>
             </thead>
             <tbody>
@@ -666,25 +694,25 @@ function ServiceFilterBar({
       <div className="grid gap-3 sm:grid-cols-3">
         <FilterSelect
           disabled={disabled}
-          label="Overall"
+          label="总体"
           value={filters.status}
           onChange={(status) =>
             onUpdate({ ...filters, status: status as StatusFilter })
           }
         >
-          <option value={allFilterValue}>All statuses</option>
-          <option value="ok">OK</option>
-          <option value="warning">Warning</option>
-          <option value="error">Error</option>
-          <option value="unknown">Unknown</option>
+          <option value={allFilterValue}>全部状态</option>
+          <option value="ok">正常</option>
+          <option value="warning">警告</option>
+          <option value="error">错误</option>
+          <option value="unknown">未知</option>
         </FilterSelect>
         <FilterSelect
           disabled={disabled}
-          label="Category"
+          label="类别"
           value={filters.category}
           onChange={(category) => onUpdate({ ...filters, category })}
         >
-          <option value={allFilterValue}>All categories</option>
+          <option value={allFilterValue}>全部类别</option>
           {categories.map((category) => (
             <option key={category} value={category}>
               {category}
@@ -693,23 +721,23 @@ function ServiceFilterBar({
         </FilterSelect>
         <FilterSelect
           disabled={disabled}
-          label="Risk"
+          label="风险"
           value={filters.risk}
           onChange={(risk) =>
             onUpdate({ ...filters, risk: risk as RiskFilter })
           }
         >
-          <option value={allFilterValue}>All risks</option>
-          <option value="low">Low</option>
-          <option value="medium">Medium</option>
-          <option value="high">High</option>
-          <option value="critical">Critical</option>
+          <option value={allFilterValue}>全部风险</option>
+          <option value="low">低</option>
+          <option value="medium">中</option>
+          <option value="high">高</option>
+          <option value="critical">严重</option>
         </FilterSelect>
       </div>
       <div className="flex flex-wrap items-center gap-3 lg:justify-end">
         <span className="inline-flex items-center gap-2 text-sm text-muted-foreground">
           <ListFilter aria-hidden="true" className="size-4" />
-          {visibleCount} of {serviceCount} visible
+          当前显示 {visibleCount} / {serviceCount}
         </span>
         <button
           type="button"
@@ -721,7 +749,7 @@ function ServiceFilterBar({
             aria-hidden="true"
             className={cn("size-4", refreshing && "animate-spin")}
           />
-          Refresh
+          刷新
         </button>
       </div>
     </div>
@@ -769,11 +797,11 @@ function LoadingServicesState() {
           className="mx-auto size-9 animate-spin text-primary"
         />
         <h2 className="mt-4 text-lg font-semibold text-card-foreground">
-          Loading service snapshot
+          正在加载服务快照
         </h2>
         <p className="mt-2 text-sm text-muted-foreground">
-          Reading registered service status from <code>/api/services</code> and
-          registry metadata from <code>/api/config/services</code>.
+          正在从 <code>/api/services</code> 读取已注册服务状态，并从{" "}
+          <code>/api/config/services</code> 读取注册表元数据。
         </p>
       </div>
     </div>
@@ -786,12 +814,10 @@ function EmptyServicesState() {
       <div className="max-w-md">
         <Server aria-hidden="true" className="mx-auto size-8 text-primary" />
         <h2 className="mt-4 text-lg font-semibold text-card-foreground">
-          No registered services returned
+          未返回已注册服务
         </h2>
         <p className="mt-2 text-sm text-muted-foreground">
-          The backend responded successfully, but <code>/api/services</code>{" "}
-          returned an empty list. Check the management service registry on the
-          backend side.
+          后端已成功响应，但 <code>/api/services</code> 返回空列表。请检查后端管理服务注册表。
         </p>
       </div>
     </div>
@@ -804,11 +830,10 @@ function NoFilteredServicesState() {
       <div className="max-w-md">
         <ListFilter aria-hidden="true" className="mx-auto size-8 text-primary" />
         <h2 className="mt-4 text-lg font-semibold text-card-foreground">
-          No services match these filters
+          没有服务匹配当前筛选
         </h2>
         <p className="mt-2 text-sm text-muted-foreground">
-          Adjust status, category, or risk filters to return to the full
-          backend snapshot.
+          调整状态、类别或风险筛选即可返回完整后端快照。
         </p>
       </div>
     </div>
@@ -842,7 +867,7 @@ function ErrorServicesState({
           onClick={onRefresh}
         >
           <RefreshCw aria-hidden="true" className="size-4" />
-          Retry
+          重试
         </button>
       </div>
     </div>
@@ -874,12 +899,10 @@ function CommandsPanel({
         <div>
           <h2 className="flex items-center gap-2 text-xl font-semibold tracking-normal text-card-foreground">
             <DatabaseZap aria-hidden="true" className="size-5" />
-            Typed commands
+            类型化命令
           </h2>
           <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
-            Visible command capabilities are discovered from{" "}
-            <code>/api/commands</code>; only known typed payloads can be
-            submitted.
+            可见命令能力来自 <code>/api/commands</code>；前端只提交已知的类型化载荷。
           </p>
         </div>
         <button
@@ -892,7 +915,7 @@ function CommandsPanel({
             aria-hidden="true"
             className={cn("size-4", busy && "animate-spin")}
           />
-          Refresh commands
+          刷新命令
         </button>
       </div>
 
@@ -908,10 +931,10 @@ function CommandsPanel({
               className="mx-auto size-8 animate-spin text-primary"
             />
             <h3 className="mt-4 text-base font-semibold text-card-foreground">
-              Loading command discovery
+              正在加载命令发现结果
             </h3>
             <p className="mt-2 text-sm text-muted-foreground">
-              Reading visible backend command definitions.
+              正在读取后端可见命令定义。
             </p>
           </div>
         </div>
@@ -923,11 +946,10 @@ function CommandsPanel({
               className="mx-auto size-8 text-primary"
             />
             <h3 className="mt-4 text-base font-semibold text-card-foreground">
-              No visible commands returned
+              未返回可见命令
             </h3>
             <p className="mt-2 text-sm text-muted-foreground">
-              The backend responded successfully, but no command definitions are
-              currently visible to the operator UI.
+              后端已成功响应，但当前没有可供操作员界面展示的命令定义。
             </p>
           </div>
         </div>
@@ -977,13 +999,13 @@ function CommandCard({
       </div>
 
       <dl className="mt-4 grid grid-cols-2 gap-3 text-sm">
-        <DetailItem label="Transport" value={command.node.transport} />
+        <DetailItem label="传输" value={formatTransport(command.node.transport)} />
         <DetailItem label="Schema" value={command.node.payload_schema} />
         <DetailItem
-          label="Confirm"
+          label="确认"
           value={formatBoolean(command.backend.requires_confirm)}
         />
-        <DetailItem label="Support" value={supported ? "typed form" : "unavailable"} />
+        <DetailItem label="支持状态" value={supported ? "类型化表单" : "不可用"} />
       </dl>
 
       {supported ? (
@@ -994,8 +1016,8 @@ function CommandCard({
         />
       ) : (
         <InlineCommandNotice
-          title="Unsupported typed payload"
-          text="This discovered command is visible, but the frontend has no typed payload form for it yet."
+          title="暂不支持的类型化载荷"
+          text="该发现命令可见，但前端尚未提供对应的类型化载荷表单。"
         />
       )}
     </article>
@@ -1017,11 +1039,11 @@ function RecentActivityPanel({
         <div>
           <h2 className="flex items-center gap-2 text-xl font-semibold tracking-normal text-card-foreground">
             <ListRestart aria-hidden="true" className="size-5" />
-            Recent activity
+            最近活动
           </h2>
           <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
-            Restart, typed command, backend warning, and status stream events
-            from <code>/api/events/recent</code> and <code>/ws/events</code>.
+            展示来自 <code>/api/events/recent</code> 和 <code>/ws/events</code>{" "}
+            的重启、类型化命令、后端警告和状态流事件。
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -1029,7 +1051,7 @@ function RecentActivityPanel({
           {connectionState.retry_attempt ? (
             <span className="inline-flex items-center gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-900">
               <RefreshCw aria-hidden="true" className="size-4" />
-              Retry {connectionState.retry_attempt}
+              第 {connectionState.retry_attempt} 次重试
             </span>
           ) : null}
         </div>
@@ -1038,29 +1060,29 @@ function RecentActivityPanel({
       <div className="grid gap-3 border-b border-border p-4 md:grid-cols-3">
         <ActivityMeta
           icon={Activity}
-          label="Last event"
+          label="最近事件"
           value={
             eventStream.lastEventAt
               ? formatTimestamp(eventStream.lastEventAt)
-              : "not received"
+              : "尚未收到"
           }
         />
         <ActivityMeta
           icon={RefreshCw}
-          label="Fallback refresh"
+          label="回退刷新"
           value={
             eventStream.fallbackRefreshAt
               ? formatTimestamp(eventStream.fallbackRefreshAt)
-              : "not used"
+              : "未使用"
           }
         />
         <ActivityMeta
           icon={ListRestart}
-          label="Recent history"
+          label="最近历史"
           value={
             eventStream.loadedRecentAt
-              ? `${events.length} events loaded`
-              : "loading history"
+              ? `已加载 ${events.length} 条事件`
+              : "正在加载历史"
           }
         />
       </div>
@@ -1069,10 +1091,9 @@ function RecentActivityPanel({
         <InlineNotice
           icon={RefreshCw}
           tone="warning"
-          title="WebSocket reconnect scheduled"
+          title="已安排 WebSocket 重连"
         >
-          Next attempt {formatTimestamp(connectionState.next_retry_at)}. A REST
-          service refresh runs while the event stream is unavailable.
+          下次尝试时间 {formatTimestamp(connectionState.next_retry_at)}。事件流不可用时会执行 REST 服务刷新。
         </InlineNotice>
       ) : null}
 
@@ -1090,11 +1111,10 @@ function RecentActivityPanel({
               className="mx-auto size-8 text-primary"
             />
             <h3 className="mt-4 text-base font-semibold text-card-foreground">
-              No recent events loaded
+              暂无最近事件
             </h3>
             <p className="mt-2 text-sm text-muted-foreground">
-              Recent activity initializes from the backend event history and
-              then appends live WebSocket events.
+              最近活动会先从后端事件历史初始化，然后追加实时 WebSocket 事件。
             </p>
           </div>
         </div>
@@ -1163,7 +1183,7 @@ function ActivityEventItem({ event }: { event: ManagementEvent }) {
           {summary.description}
         </p>
         <p className="mt-2 break-all text-xs text-muted-foreground">
-          Event {event.id}
+          事件 {event.id}
         </p>
       </div>
       <time
@@ -1188,13 +1208,13 @@ function getEventSummary(event: ManagementEvent): {
       const services = getEventServices(event)
 
       return {
-        badge: "status",
+        badge: "状态",
         description:
           services === null
-            ? "Status snapshot payload did not include a valid service list."
-            : `${services.length} service statuses received from the backend.`,
+            ? "状态快照载荷没有包含有效的服务列表。"
+            : `已从后端收到 ${services.length} 个服务状态。`,
         icon: Server,
-        title: "Service status snapshot",
+        title: "服务状态快照",
         tone: "info",
       }
     }
@@ -1202,58 +1222,58 @@ function getEventSummary(event: ManagementEvent): {
       const service = getEventService(event)
 
       return {
-        badge: "status",
+        badge: "状态",
         description: service
-          ? `${service.display_name} is ${service.overall.level}: ${service.overall.reason}.`
-          : "A service status changed event arrived without a recognized service payload.",
+          ? `${service.display_name} 当前为 ${formatOverallLevel(service.overall.level)}：${service.overall.reason}。`
+          : "收到服务状态变更事件，但没有识别到服务载荷。",
         icon: Activity,
         title: service
-          ? `${service.display_name} status changed`
-          : "Service status changed",
+          ? `${service.display_name} 状态已变更`
+          : "服务状态已变更",
         tone: service ? getToneForOverallLevel(service.overall.level) : "neutral",
       }
     }
     case "restart_requested": {
       const request = getRestartRequestPayload(event)
-      const service = request?.service ?? "registered service"
+      const service = request?.service ?? "已注册服务"
 
       return {
-        badge: "restart",
+        badge: "重启",
         description: request
-          ? `${request.mode} restart requested for ${service}${request.reason ? `: ${request.reason}` : "."}`
-          : "A restart request event arrived with an unrecognized payload.",
+          ? `已为 ${service} 请求${formatRestartMode(request.mode)}重启${request.reason ? `：${request.reason}` : "。"}`
+          : "收到重启请求事件，但载荷无法识别。",
         icon: RotateCcw,
-        title: `Restart requested: ${service}`,
+        title: `已请求重启：${service}`,
         tone: "warning",
       }
     }
     case "restart_finished": {
       const response = getRestartResponsePayload(event)
       const success = response?.result === "success"
-      const service = response?.service ?? "registered service"
+      const service = response?.service ?? "已注册服务"
 
       return {
-        badge: "restart",
+        badge: "重启",
         description: response
-          ? `${response.mode} restart ${response.result} for ${service}.`
-          : "A restart result event arrived with an unrecognized payload.",
+          ? `${service} 的${formatRestartMode(response.mode)}重启结果：${formatResult(response.result)}。`
+          : "收到重启结果事件，但载荷无法识别。",
         icon: success ? CheckCircle2 : XCircle,
-        title: `Restart finished: ${service}`,
+        title: `重启完成：${service}`,
         tone: success ? "success" : "error",
       }
     }
     case "command_requested": {
       const request = getCommandRequestPayload(event)
-      const target = request?.target ?? "registered service"
-      const command = request?.command ?? "typed command"
+      const target = request?.target ?? "已注册服务"
+      const command = request?.command ?? "类型化命令"
 
       return {
-        badge: "command",
+        badge: "命令",
         description: request
-          ? `${target}/${command} was requested${request.reason ? `: ${request.reason}` : "."}`
-          : "A command request event arrived with an unrecognized payload.",
+          ? `已请求 ${target}/${command}${request.reason ? `：${request.reason}` : "。"}`
+          : "收到命令请求事件，但载荷无法识别。",
         icon: Send,
-        title: `Command requested: ${target}/${command}`,
+        title: `已请求命令：${target}/${command}`,
         tone: "info",
       }
     }
@@ -1261,32 +1281,32 @@ function getEventSummary(event: ManagementEvent): {
       const response = getCommandResponsePayload(event)
       const success = response?.result === "success"
       const rejected = response?.state === "rejected"
-      const target = response?.target ?? "registered service"
-      const command = response?.command ?? "typed command"
+      const target = response?.target ?? "已注册服务"
+      const command = response?.command ?? "类型化命令"
 
       return {
-        badge: "command",
+        badge: "命令",
         description: response
-          ? `${target}/${command} ${response.result}: ${response.message}`
-          : "A command result event arrived with an unrecognized payload.",
+          ? `${target}/${command} ${formatResult(response.result)}：${response.message}`
+          : "收到命令结果事件，但载荷无法识别。",
         icon: success ? CheckCircle2 : XCircle,
-        title: `Command finished: ${target}/${command}`,
+        title: `命令完成：${target}/${command}`,
         tone: success ? "success" : rejected ? "warning" : "error",
       }
     }
     case "backend_warning": {
       return {
-        badge: "warning",
+        badge: "警告",
         description: getWarningDescription(event.payload),
         icon: AlertTriangle,
-        title: "Backend warning",
+        title: "后端警告",
         tone: "warning",
       }
     }
     default:
       return {
-        badge: "event",
-        description: "Reserved or unknown backend event received safely.",
+        badge: "事件",
+        description: "已安全接收保留或未知的后端事件。",
         icon: CircleHelp,
         title: formatEventType(event.type),
         tone: "neutral",
@@ -1365,7 +1385,7 @@ function ResetOriginForm({
 
       <label className="grid gap-2">
         <span className="text-xs font-semibold uppercase text-muted-foreground">
-          reason
+          原因
         </span>
         <textarea
           className="min-h-20 resize-y rounded-md border border-input bg-card px-3 py-2 text-sm text-card-foreground outline-none transition focus:border-ring focus:ring-2 focus:ring-ring/20"
@@ -1386,9 +1406,8 @@ function ResetOriginForm({
             onChange={(event) => setOperatorConfirmed(event.target.checked)}
           />
           <span>
-            Confirm reset origin for{" "}
-            <strong>{command.target}</strong>. This sends the typed payload to
-            the backend allowlisted command endpoint.
+            确认为 <strong>{command.target}</strong>{" "}
+            重置原点。该操作会向后端白名单命令端点发送类型化载荷。
           </span>
         </label>
       ) : null}
@@ -1407,10 +1426,10 @@ function ResetOriginForm({
           ) : (
             <Send aria-hidden="true" className="size-4" />
           )}
-          Reset origin
+          重置原点
         </button>
         <span className="text-xs text-muted-foreground">
-          Payload fields are fixed by the reset-origin typed form.
+          载荷字段由 reset_origin 类型化表单固定。
         </span>
       </div>
 
@@ -1434,7 +1453,7 @@ function NumberField({
   return (
     <label className="grid gap-2">
       <span className="text-xs font-semibold uppercase text-muted-foreground">
-        {label}
+        {formatResetOriginFieldLabel(label)}
       </span>
       <input
         className="h-10 rounded-md border border-input bg-card px-3 text-sm text-card-foreground outline-none transition focus:border-ring focus:ring-2 focus:ring-ring/20"
@@ -1466,20 +1485,20 @@ function CommandResponseSummary({
 }) {
   return (
     <dl className="grid grid-cols-2 gap-3 text-sm">
-      <DetailItem label="Request ID" value={response.request_id} />
-      <DetailItem label="Accepted" value={formatBoolean(response.accepted)} />
-      <DetailItem label="State" value={response.state} />
-      <DetailItem label="Result" value={response.result} />
+      <DetailItem label="请求 ID" value={response.request_id} />
+      <DetailItem label="已接受" value={formatBoolean(response.accepted)} />
+      <DetailItem label="状态" value={formatCommandState(response.state)} />
+      <DetailItem label="结果" value={formatResult(response.result)} />
       <DetailItem
-        label="Started"
+        label="开始时间"
         value={formatNullableTimestamp(response.started_at)}
       />
       <DetailItem
-        label="Finished"
+        label="结束时间"
         value={formatNullableTimestamp(response.finished_at)}
       />
       <div className="col-span-2">
-        <DetailItem label="Message" value={response.message} />
+        <DetailItem label="消息" value={response.message} />
       </div>
     </dl>
   )
@@ -1510,7 +1529,7 @@ function ServiceRow({ service, selected, onSelect }: ServiceRowProps) {
   const OverallIcon = overallIcons[service.overall.level]
   const agentIssue =
     service.docker.running && !service.ros.agent_available
-      ? "Docker running; ROS agent unavailable"
+      ? "Docker 正在运行；ROS 代理不可用"
       : service.ros.summary
 
   return (
@@ -1540,16 +1559,16 @@ function ServiceRow({ service, selected, onSelect }: ServiceRowProps) {
           {service.category}
         </span>
         <p className="mt-2 text-xs text-muted-foreground">
-          profile {service.compose_profile}
+          Profile {service.compose_profile}
         </p>
       </td>
       <td className="px-5 py-4">
         <StatusPill level={service.overall.level}>
           <OverallIcon aria-hidden="true" className="size-3.5" />
-          {service.overall.level}
+          {formatOverallLevel(service.overall.level)}
         </StatusPill>
         <p className="mt-2 text-xs text-muted-foreground">
-          {service.overall.reason}
+          {formatDisplaySummary(service.overall.reason)}
         </p>
       </td>
       <td className="px-5 py-4">
@@ -1559,15 +1578,15 @@ function ServiceRow({ service, selected, onSelect }: ServiceRowProps) {
             className={cn("size-4", dockerStyles[service.docker.state])}
           />
           <span className="text-sm font-medium capitalize text-card-foreground">
-            {service.docker.state}
+            {formatDockerState(service.docker.state)}
           </span>
         </div>
         <p className="mt-2 text-xs text-muted-foreground">
-          running={String(service.docker.running)}
-          {service.docker.status ? `, status ${service.docker.status}` : ""}
+          运行={formatBoolean(service.docker.running)}
+          {service.docker.status ? `，状态 ${service.docker.status}` : ""}
         </p>
         <p className="mt-1 text-xs text-muted-foreground">
-          restarts {service.docker.restart_count}
+          重启 {service.docker.restart_count} 次
         </p>
       </td>
       <td className="px-5 py-4">
@@ -1578,15 +1597,15 @@ function ServiceRow({ service, selected, onSelect }: ServiceRowProps) {
             <WifiOff aria-hidden="true" className="size-4 text-amber-700" />
           )}
           <span className="text-sm font-medium text-card-foreground">
-            {service.ros.agent_available ? "Agent available" : "Agent unavailable"}
+            {service.ros.agent_available ? "代理可用" : "代理不可用"}
           </span>
         </div>
         <p className="mt-2 text-xs text-muted-foreground">
-          {agentIssue}
+          {formatDisplaySummary(agentIssue)}
         </p>
         <p className="mt-1 text-xs text-muted-foreground">
-          {service.ros.expected_nodes.length} nodes, {service.ros.topics.length}{" "}
-          topics
+          {service.ros.expected_nodes.length} 个节点，{service.ros.topics.length}{" "}
+          个话题
         </p>
       </td>
       <td className="px-5 py-4">
@@ -1623,7 +1642,7 @@ function RiskPill({ riskLevel }: { riskLevel: ServiceRiskLevel }) {
         riskStyles[riskLevel],
       )}
     >
-      {riskLevel}
+      {formatRiskLevel(riskLevel)}
     </span>
   )
 }
@@ -1658,7 +1677,7 @@ function ServiceInspector({
             <div className="flex items-start justify-between gap-4">
               <div>
                 <p className="text-sm font-medium text-muted-foreground">
-                  Selected service
+                  当前服务
                 </p>
                 <h2 className="mt-1 text-2xl font-semibold tracking-normal text-card-foreground">
                   {detailService.display_name}
@@ -1670,10 +1689,10 @@ function ServiceInspector({
             </div>
 
             <dl className="mt-5 grid grid-cols-2 gap-3 text-sm">
-              <DetailItem label="Logical name" value={detailService.service_name} />
+              <DetailItem label="逻辑名称" value={detailService.service_name} />
               <DetailItem label="Profile" value={detailService.compose_profile} />
-              <DetailItem label="Category" value={detailService.category} />
-              <DetailItem label="Risk" value={detailService.risk_level} />
+              <DetailItem label="类别" value={detailService.category} />
+              <DetailItem label="风险" value={formatRiskLevel(detailService.risk_level)} />
             </dl>
 
             <div className="mt-4 flex flex-wrap items-center gap-3">
@@ -1694,14 +1713,14 @@ function ServiceInspector({
                       "animate-spin",
                   )}
                 />
-                Refresh detail
+                刷新详情
               </button>
               <span className="text-xs text-muted-foreground">
                 {diagnostics.detail.loadedAt
-                  ? `detail loaded ${formatTimestamp(
+                  ? `详情已加载 ${formatTimestamp(
                       diagnostics.detail.loadedAt,
                     )}`
-                  : "detail loads from the selected logical service"}
+                  : "详情会从当前选中的逻辑服务加载"}
               </span>
             </div>
 
@@ -1712,14 +1731,13 @@ function ServiceInspector({
         ) : (
           <div>
             <p className="text-sm font-medium text-muted-foreground">
-              Selected service
+              当前服务
             </p>
             <h2 className="mt-1 text-2xl font-semibold tracking-normal text-card-foreground">
-              Awaiting snapshot
+              等待快照
             </h2>
             <p className="mt-3 text-sm text-muted-foreground">
-              Service detail panels use backend <code>service_name</code>{" "}
-              values after the status snapshot is populated.
+              状态快照填充后，服务详情面板会使用后端 <code>service_name</code> 值。
             </p>
           </div>
         )}
@@ -1728,16 +1746,16 @@ function ServiceInspector({
       <section className="rounded-lg border border-border bg-card p-5 shadow-sm">
         <h3 className="flex items-center gap-2 text-base font-semibold text-card-foreground">
           <Gauge aria-hidden="true" className="size-4" />
-          Status layers
+          状态层
         </h3>
         <div className="mt-4 space-y-3">
           <LayerLine
             icon={Activity}
-            label="Overall"
+            label="总体"
             value={
               detailService
-                ? `${detailService.overall.level}: ${detailService.overall.reason}`
-                : "no service selected"
+              ? `${formatOverallLevel(detailService.overall.level)}：${formatDisplaySummary(detailService.overall.reason)}`
+                : "未选择服务"
             }
           />
           <LayerLine
@@ -1746,7 +1764,7 @@ function ServiceInspector({
             value={
               detailService
                 ? formatDockerSummary(detailService)
-                : "awaiting backend status"
+                : "等待后端状态"
             }
           />
           <LayerLine
@@ -1755,7 +1773,7 @@ function ServiceInspector({
             value={
               detailService
                 ? formatRosSummary(detailService)
-                : "awaiting backend status"
+                : "等待后端状态"
             }
           />
         </div>
@@ -1846,42 +1864,42 @@ function DockerDetailPanel({ service }: { service: ServiceStatus | null }) {
       <PanelHeader
         detail={
           service
-            ? `Container ${service.container_name}`
-            : "Awaiting selected service"
+            ? `容器 ${service.container_name}`
+            : "等待选择服务"
         }
         icon={Container}
-        title="Docker detail"
+        title="Docker 详情"
       />
       {docker ? (
         <dl className="mt-4 grid grid-cols-2 gap-3 text-sm">
-          <DetailItem label="Exists" value={formatBoolean(docker.exists)} />
-          <DetailItem label="State" value={docker.state} />
-          <DetailItem label="Running" value={formatBoolean(docker.running)} />
-          <DetailItem label="Status" value={docker.status ?? "not reported"} />
+          <DetailItem label="存在" value={formatBoolean(docker.exists)} />
+          <DetailItem label="状态" value={formatDockerState(docker.state)} />
+          <DetailItem label="运行中" value={formatBoolean(docker.running)} />
+          <DetailItem label="状态文本" value={docker.status ?? "未上报"} />
           <DetailItem
-            label="Started"
+            label="开始时间"
             value={formatNullableTimestamp(docker.started_at)}
           />
           <DetailItem
-            label="Finished"
+            label="结束时间"
             value={formatNullableTimestamp(docker.finished_at)}
           />
           <DetailItem
-            label="Exit code"
+            label="退出码"
             value={
               docker.exit_code === null
-                ? "not reported"
+                ? "未上报"
                 : docker.exit_code.toString()
             }
           />
           <DetailItem
-            label="Restart count"
+            label="重启次数"
             value={docker.restart_count.toString()}
           />
-          <DetailItem label="Health" value={docker.health ?? "not reported"} />
+          <DetailItem label="健康状态" value={docker.health ?? "未上报"} />
         </dl>
       ) : (
-        <EmptyPanelText text="Select a registered service to load Docker status." />
+        <EmptyPanelText text="选择已注册服务后加载 Docker 状态。" />
       )}
     </section>
   )
@@ -1901,30 +1919,30 @@ function RosDetailPanel({
       <PanelHeader
         detail={
           ros
-            ? `${ros.expected_nodes.length} expected nodes, ${ros.topics.length} topics`
-            : "Awaiting selected service"
+            ? `${ros.expected_nodes.length} 个预期节点，${ros.topics.length} 个话题`
+            : "等待选择服务"
         }
         icon={RadioTower}
-        title="ROS detail"
+        title="ROS 详情"
       />
       {ros ? (
         <div className="mt-4 space-y-4">
           <dl className="grid grid-cols-2 gap-3 text-sm">
             <DetailItem
-              label="Agent"
-              value={ros.agent_available ? "available" : "unavailable"}
+              label="代理"
+              value={ros.agent_available ? "可用" : "不可用"}
             />
-            <DetailItem label="Level" value={ros.level} />
-            <DetailItem label="Summary" value={ros.summary} />
+            <DetailItem label="等级" value={formatOverallLevel(ros.level)} />
+            <DetailItem label="摘要" value={formatDisplaySummary(ros.summary)} />
             <DetailItem
-              label="Configured topics"
+              label="配置话题数"
               value={(definition?.expected_topics.length ?? 0).toString()}
             />
           </dl>
 
           <div>
             <h4 className="text-sm font-semibold text-card-foreground">
-              Expected nodes
+              预期节点
             </h4>
             {ros.expected_nodes.length > 0 ? (
               <div className="mt-2 space-y-2">
@@ -1945,23 +1963,23 @@ function RosDetailPanel({
                             : "border-amber-200 bg-amber-50 text-amber-900",
                         )}
                       >
-                        {node.present ? "present" : "missing"}
+                        {node.present ? "存在" : "缺失"}
                       </span>
                     </div>
                     <p className="mt-2 text-xs text-muted-foreground">
-                      last seen {formatNullableTimestamp(node.last_seen)}
+                      最近出现 {formatNullableTimestamp(node.last_seen)}
                     </p>
                   </div>
                 ))}
               </div>
             ) : (
-              <EmptyPanelText text="No expected nodes were returned for this service." />
+              <EmptyPanelText text="该服务未返回预期节点。" />
             )}
           </div>
 
           <div>
             <h4 className="text-sm font-semibold text-card-foreground">
-              Topics
+              话题
             </h4>
             {ros.topics.length > 0 ? (
               <div className="mt-2 space-y-2">
@@ -1975,25 +1993,25 @@ function RosDetailPanel({
                         {topic.resolved_name}
                       </span>
                       <span className="text-xs font-semibold text-muted-foreground">
-                        {topic.present ? "present" : "missing"}
+                        {topic.present ? "存在" : "缺失"}
                       </span>
                     </div>
                     <p className="mt-2 text-xs text-muted-foreground">
-                      {topic.required_endpoint}, publishers{" "}
-                      {topic.publisher_count}, subscribers{" "}
+                      {formatEndpointRole(topic.required_endpoint)}，发布者{" "}
+                      {topic.publisher_count}，订阅者{" "}
                       {topic.subscriber_count}
                     </p>
                   </div>
                 ))}
               </div>
             ) : (
-              <EmptyPanelText text="No topic observations were returned for this service." />
+              <EmptyPanelText text="该服务未返回话题观测结果。" />
             )}
           </div>
 
           <div>
             <h4 className="text-sm font-semibold text-card-foreground">
-              Diagnostics
+              诊断
             </h4>
             {ros.diagnostics.length > 0 ? (
               <div className="mt-2 space-y-2">
@@ -2007,7 +2025,7 @@ function RosDetailPanel({
                         {diagnostic.name}
                       </span>
                       <StatusPill level={diagnostic.level}>
-                        {diagnostic.level}
+                        {formatOverallLevel(diagnostic.level)}
                       </StatusPill>
                     </div>
                     <p className="mt-2 text-xs text-muted-foreground">
@@ -2017,12 +2035,12 @@ function RosDetailPanel({
                 ))}
               </div>
             ) : (
-              <EmptyPanelText text="No ROS diagnostics were returned for this service." />
+              <EmptyPanelText text="该服务未返回 ROS 诊断。" />
             )}
           </div>
         </div>
       ) : (
-        <EmptyPanelText text="Select a registered service to load ROS diagnostics." />
+        <EmptyPanelText text="选择已注册服务后加载 ROS 诊断。" />
       )}
     </section>
   )
@@ -2056,16 +2074,16 @@ function LogsPanel({
       <PanelHeader
         detail={
           logs
-            ? `${logs.lines.length} lines from ${logs.container_name}`
-            : "Bounded container logs"
+            ? `${logs.container_name} 返回 ${logs.lines.length} 行`
+            : "有界 Docker 容器日志"
         }
         icon={FileText}
-        title="Docker logs"
+        title="Docker 日志"
       />
       <div className="mt-4 grid gap-3 sm:grid-cols-[120px_1fr]">
         <label className="grid gap-2">
           <span className="text-xs font-semibold uppercase text-muted-foreground">
-            Tail
+            尾部行数
           </span>
           <input
             className="h-10 rounded-md border border-input bg-card px-3 text-sm text-card-foreground outline-none transition focus:border-ring focus:ring-2 focus:ring-ring/20 disabled:cursor-not-allowed disabled:opacity-60"
@@ -2098,7 +2116,7 @@ function LogsPanel({
           <ToggleCheckbox
             checked={options.timestamps}
             disabled={!service || busy}
-            label="timestamps"
+            label="时间戳"
             onChange={(timestamps) =>
               onUpdateOptions({ ...options, timestamps })
             }
@@ -2113,23 +2131,23 @@ function LogsPanel({
               aria-hidden="true"
               className={cn("size-4", busy && "animate-spin")}
             />
-            Refresh logs
+            刷新日志
           </button>
         </div>
       </div>
 
       {error ? <PanelError error={error} /> : null}
       <p className="mt-4 text-xs text-muted-foreground">
-        Logs are unstructured Docker container output for{" "}
-        <code>{service?.service_name ?? "no service selected"}</code>
-        {loadedAt ? `, loaded ${formatTimestamp(loadedAt)}` : ""}.
+        日志是{" "}
+        <code>{service?.service_name ?? "未选择服务"}</code> 的非结构化 Docker 容器输出
+        {loadedAt ? `，加载时间 ${formatTimestamp(loadedAt)}` : ""}。
       </p>
       <pre className="mt-3 max-h-[360px] overflow-auto rounded-md border border-zinc-800 bg-zinc-950 p-3 text-xs leading-relaxed text-zinc-100">
         {logs && logs.lines.length > 0
           ? logs.lines.join("\n")
           : service
-            ? "No log lines returned for the current options."
-            : "Select a registered service to load Docker logs."}
+            ? "当前选项未返回日志行。"
+            : "选择已注册服务后加载 Docker 日志。"}
       </pre>
     </section>
   )
@@ -2160,11 +2178,11 @@ function StatsPanel({
         <PanelHeader
           detail={
             loadedAt
-              ? `Snapshot loaded ${formatTimestamp(loadedAt)}`
-              : "Single resource snapshot"
+              ? `快照已加载 ${formatTimestamp(loadedAt)}`
+              : "单次资源快照"
           }
           icon={Cpu}
-          title="Docker stats"
+          title="Docker 统计"
         />
         <button
           type="button"
@@ -2176,7 +2194,7 @@ function StatsPanel({
             aria-hidden="true"
             className={cn("size-4", busy && "animate-spin")}
           />
-          Refresh
+          刷新
         </button>
       </div>
       {error ? <PanelError error={error} /> : null}
@@ -2184,35 +2202,35 @@ function StatsPanel({
         <dl className="mt-4 grid grid-cols-2 gap-3 text-sm">
           <DetailItem label="CPU" value={formatPercent(stats.cpu_percent)} />
           <DetailItem
-            label="Memory"
+            label="内存"
             value={`${formatBytes(stats.memory_usage_bytes)} / ${formatBytes(
               stats.memory_limit_bytes,
             )}`}
           />
           <DetailItem
-            label="Memory %"
+            label="内存占比"
             value={formatPercent(stats.memory_percent)}
           />
           <DetailItem
-            label="Network RX"
+            label="网络接收"
             value={formatBytes(stats.network_rx_bytes)}
           />
           <DetailItem
-            label="Network TX"
+            label="网络发送"
             value={formatBytes(stats.network_tx_bytes)}
           />
           <DetailItem
-            label="Block read"
+            label="块读取"
             value={formatBytes(stats.block_read_bytes)}
           />
           <DetailItem
-            label="Block write"
+            label="块写入"
             value={formatBytes(stats.block_write_bytes)}
           />
           <DetailItem label="PIDs" value={stats.pids_current.toString()} />
         </dl>
       ) : (
-        <EmptyPanelText text="Select a registered service to load one Docker stats snapshot." />
+        <EmptyPanelText text="选择已注册服务后加载一次 Docker 统计快照。" />
       )}
     </section>
   )
@@ -2252,14 +2270,14 @@ function HardRestartPanel({
   return (
     <section className="rounded-lg border border-red-200 bg-red-50/60 p-5 shadow-sm">
       <PanelHeader
-        detail="Posts mode hard to the selected logical service"
+        detail="向当前逻辑服务提交硬重启模式"
         icon={RotateCcw}
-        title="Hard restart"
+        title="硬重启"
       />
       <form className="mt-4 space-y-4" onSubmit={handleSubmit}>
         <label className="grid gap-2">
           <span className="text-xs font-semibold uppercase text-red-900">
-            Optional reason
+            可选原因
           </span>
           <textarea
             className="min-h-20 resize-y rounded-md border border-red-200 bg-card px-3 py-2 text-sm text-card-foreground outline-none transition focus:border-red-400 focus:ring-2 focus:ring-red-300/40 disabled:cursor-not-allowed disabled:opacity-60"
@@ -2279,9 +2297,8 @@ function HardRestartPanel({
               onChange={(event) => setRiskConfirmed(event.target.checked)}
             />
             <span>
-              Confirm high-risk hard restart for{" "}
-              <strong>{highRiskService.display_name}</strong>. This is a second
-              explicit operator confirmation.
+              确认对 <strong>{highRiskService.display_name}</strong>{" "}
+              执行高风险硬重启。这是第二次显式操作员确认。
             </span>
           </label>
         ) : null}
@@ -2299,23 +2316,23 @@ function HardRestartPanel({
           ) : (
             <RotateCcw aria-hidden="true" className="size-4" />
           )}
-          Hard restart
+          硬重启
         </button>
       </form>
 
       {error ? <PanelError error={error} /> : null}
       {response ? (
         <dl className="mt-4 grid grid-cols-2 gap-3 text-sm">
-          <DetailItem label="Request ID" value={response.request_id} />
+          <DetailItem label="请求 ID" value={response.request_id} />
           <DetailItem
-            label="Started"
+            label="开始时间"
             value={formatNullableTimestamp(response.started_at)}
           />
           <DetailItem
-            label="Finished"
+            label="结束时间"
             value={formatNullableTimestamp(response.finished_at)}
           />
-          <DetailItem label="Result" value={response.result} />
+          <DetailItem label="结果" value={formatResult(response.result)} />
         </dl>
       ) : null}
     </section>
@@ -2563,14 +2580,121 @@ function getWarningDescription(payload: ManagementEvent["payload"]) {
     }
   }
 
-  return "Backend emitted a warning event."
+  return "后端发出了警告事件。"
 }
 
 function formatEventType(type: string) {
+  const knownEventLabels: Record<string, string> = {
+    service_status_snapshot: "服务状态快照",
+    service_status_changed: "服务状态变更",
+    restart_requested: "重启请求",
+    restart_finished: "重启完成",
+    command_requested: "命令请求",
+    command_finished: "命令完成",
+    backend_warning: "后端警告",
+  }
+
+  if (type in knownEventLabels) {
+    return knownEventLabels[type]
+  }
+
   return type
     .split("_")
     .filter((part) => part.length > 0)
-    .map((part) => part[0].toUpperCase() + part.slice(1))
+    .join(" ")
+}
+
+function formatResetOriginFieldLabel(
+  label: keyof Omit<ResetOriginPayload, "reason">,
+) {
+  const labels: Record<keyof Omit<ResetOriginPayload, "reason">, string> = {
+    pose_x: "位姿 X",
+    pose_y: "位姿 Y",
+    pose_z: "位姿 Z",
+    pose_yaw_deg: "偏航角",
+  }
+
+  return labels[label]
+}
+
+function formatOverallLevel(level: OverallLevel) {
+  return overallLabels[level]
+}
+
+function formatRiskLevel(riskLevel: ServiceRiskLevel) {
+  return riskLabels[riskLevel]
+}
+
+function formatDockerState(state: DockerState) {
+  return dockerStateLabels[state]
+}
+
+function formatRestartMode(mode: RestartMode) {
+  if (mode === "hard") {
+    return "硬"
+  }
+
+  if (mode === "soft") {
+    return "软"
+  }
+
+  return mode
+}
+
+function formatCommandState(state: CommandState) {
+  if (state === "finished") {
+    return "已完成"
+  }
+
+  if (state === "rejected") {
+    return "已拒绝"
+  }
+
+  return state
+}
+
+function formatResult(result: CommandResult | RestartResult) {
+  if (result === "success") {
+    return "成功"
+  }
+
+  if (result === "failed") {
+    return "失败"
+  }
+
+  if (result === "rejected") {
+    return "已拒绝"
+  }
+
+  return result
+}
+
+function formatEndpointRole(role: string) {
+  if (role === "publisher") {
+    return "需要发布者"
+  }
+
+  if (role === "subscriber") {
+    return "需要订阅者"
+  }
+
+  return role
+}
+
+function formatTransport(transport: CommandTransport) {
+  const knownTransportLabels: Record<string, string> = {
+    action: "Action 动作",
+    service: "Service 服务",
+    topic: "Topic 话题",
+  }
+
+  return knownTransportLabels[transport] ?? transport
+}
+
+function formatDisplaySummary(value: string) {
+  return value
+    .split("_")
+    .filter((part) => part.length > 0)
     .join(" ")
 }
 
@@ -2583,11 +2707,11 @@ function formatTimestamp(value: string) {
 }
 
 function formatNullableTimestamp(value: string | null) {
-  return value ? formatTimestamp(value) : "not reported"
+  return value ? formatTimestamp(value) : "未上报"
 }
 
 function formatBoolean(value: boolean) {
-  return value ? "true" : "false"
+  return value ? "是" : "否"
 }
 
 function formatPercent(value: number) {
@@ -2670,16 +2794,16 @@ function isNullableBoolean(value: unknown): value is boolean | null {
 
 function formatDockerSummary(service: ServiceStatus) {
   const status = service.docker.status
-    ? `, status ${service.docker.status}`
-    : ", status not reported"
+    ? `，状态 ${service.docker.status}`
+    : "，状态未上报"
   const exitCode =
     service.docker.exit_code === null
       ? ""
-      : `, exit code ${service.docker.exit_code}`
+      : `，退出码 ${service.docker.exit_code}`
 
-  return `${service.docker.state}, running=${String(
+  return `${formatDockerState(service.docker.state)}，运行=${formatBoolean(
     service.docker.running,
-  )}${status}, restarts=${service.docker.restart_count}${exitCode}`
+  )}${status}，重启 ${service.docker.restart_count} 次${exitCode}`
 }
 
 function getCommandErrorCopy(error: ApiError): {
@@ -2688,28 +2812,28 @@ function getCommandErrorCopy(error: ApiError): {
 } {
   if (error.code === "command_confirm_required") {
     return {
-      body: "Backend policy requires explicit confirmation. Check the confirmation box and submit again.",
-      title: "Command confirmation required",
+      body: "后端策略要求显式确认。勾选确认框后再次提交。",
+      title: "命令需要确认",
     }
   }
 
   if (error.code === "command_not_found") {
     return {
-      body: "The command definition is no longer in the backend registry. Discovery is refreshing.",
-      title: "Command no longer available",
+      body: "该命令定义已不在后端注册表中。命令发现正在刷新。",
+      title: "命令不再可用",
     }
   }
 
   if (error.code === "command_transport_unavailable") {
     return {
-      body: "The backend could not reach the management agent or ROS command transport.",
-      title: "Management agent transport unavailable",
+      body: "后端无法访问管理代理或 ROS 命令传输。",
+      title: "管理代理传输不可用",
     }
   }
 
   return {
-    body: "The backend rejected or failed the typed command request.",
-    title: "Command request failed",
+    body: "后端拒绝或执行类型化命令请求失败。",
+    title: "命令请求失败",
   }
 }
 
@@ -2721,36 +2845,36 @@ function getErrorStateCopy(error: ApiError): {
 } {
   if (error.code === "auth_required") {
     return {
-      body: "The management backend requires a bearer token. Enter the configured token above and reconnect.",
+      body: "管理后端需要 Bearer 令牌。请在上方输入配置的令牌并重新连接。",
       icon: KeyRound,
       iconClass: "text-amber-700",
-      title: "Authentication required",
+      title: "需要认证",
     }
   }
 
   if (error.code === "auth_invalid") {
     return {
-      body: "The backend rejected the configured token. Clear or replace the token, then reconnect.",
+      body: "后端拒绝了当前令牌。请清除或替换令牌后重新连接。",
       icon: ShieldAlert,
       iconClass: "text-red-700",
-      title: "Invalid management token",
+      title: "管理令牌无效",
     }
   }
 
   if (error.code === "docker_unavailable") {
     return {
-      body: "The backend is reachable, but Docker Engine status cannot be read. This is a backend/Docker control plane issue, not an individual ROS service failure.",
+      body: "后端可达，但无法读取 Docker Engine 状态。这是后端或 Docker 控制平面问题，不是单个 ROS 服务故障。",
       icon: Container,
       iconClass: "text-red-700",
-      title: "Docker control plane unavailable",
+      title: "Docker 控制平面不可用",
     }
   }
 
   return {
-    body: "The service snapshot could not be loaded from the management backend. Retry after checking the backend URL, token, and network path.",
+    body: "无法从管理后端加载服务快照。请检查后端 URL、令牌和网络路径后重试。",
     icon: AlertTriangle,
     iconClass: "text-red-700",
-    title: "Service snapshot unavailable",
+    title: "服务快照不可用",
   }
 }
 

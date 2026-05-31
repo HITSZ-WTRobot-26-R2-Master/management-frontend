@@ -38,3 +38,10 @@ Use `bunx shadcn@latest ...` when adding or updating shadcn/ui generated files. 
 ## Language
 
 All frontend guideline documentation should be written in English.
+
+User-facing frontend UI copy must be Simplified Chinese by default. Preserve
+code identifiers, backend DTO field names, API paths, enum values, package
+metadata, service names, command names, and generated/tool output in their
+required technical forms. When backend enum or status values are shown to
+operators, prefer a local display formatter instead of changing the backend
+contract.

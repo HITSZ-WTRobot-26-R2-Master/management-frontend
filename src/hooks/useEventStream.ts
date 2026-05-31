@@ -235,7 +235,7 @@ export function useEventStream(): EventStreamState {
       } catch {
         const apiError: ApiError = {
           code: "request_failed",
-          message: "management event stream could not be opened",
+          message: "无法打开管理事件流",
         }
         setLatestError(apiError)
         setState((current) => ({
