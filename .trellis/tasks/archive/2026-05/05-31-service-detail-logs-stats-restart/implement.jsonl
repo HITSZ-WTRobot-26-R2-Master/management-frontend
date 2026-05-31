@@ -1,0 +1,8 @@
+{"file": ".trellis/spec/frontend/index.md", "reason": "Fixed frontend stack and pre-development checklist."}
+{"file": ".trellis/spec/frontend/directory-structure.md", "reason": "Place detail panels, hooks, and state in the established layout."}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "Build accessible diagnostics and restart controls."}
+{"file": ".trellis/spec/frontend/hook-guidelines.md", "reason": "Follow hook conventions for detail/logs/stats/restart calls."}
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "Use existing Jotai atoms and avoid unsafe duplicated service identity state."}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "Respect safety boundaries and quality gates."}
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "Use backend DTOs and structured ApiError handling."}
+{"file": ".trellis/spec/guides/index.md", "reason": "Cross-layer thinking guidance for service operation workflows."}

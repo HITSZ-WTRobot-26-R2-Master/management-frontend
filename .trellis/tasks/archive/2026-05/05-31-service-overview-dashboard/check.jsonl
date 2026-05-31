@@ -1,0 +1,8 @@
+{"file": ".trellis/spec/frontend/index.md", "reason": "Verify fixed stack and checklist compliance."}
+{"file": ".trellis/spec/frontend/directory-structure.md", "reason": "Verify dashboard files follow established layout."}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "Verify dashboard UI consistency and accessibility."}
+{"file": ".trellis/spec/frontend/hook-guidelines.md", "reason": "Verify service loading hook/data-fetching conventions."}
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "Verify Jotai atom consistency."}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "Verify safety boundaries and quality gates."}
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "Verify backend DTO usage and status semantics."}
+{"file": ".trellis/spec/guides/index.md", "reason": "Cross-layer review guidance for API-to-state-to-UI flow."}

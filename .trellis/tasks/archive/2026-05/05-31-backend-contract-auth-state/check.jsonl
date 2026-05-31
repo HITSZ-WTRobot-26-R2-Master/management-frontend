@@ -1,0 +1,8 @@
+{"file": ".trellis/spec/frontend/index.md", "reason": "Verify stack conventions and checklist compliance."}
+{"file": ".trellis/spec/frontend/directory-structure.md", "reason": "Verify new files follow established layout."}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "Verify auth/settings UI and shadcn rules."}
+{"file": ".trellis/spec/frontend/hook-guidelines.md", "reason": "Verify API/client and hook boundary conventions."}
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "Verify Jotai atoms and persistence semantics."}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "Verify safety boundaries and quality gates."}
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "Verify DTO shape, snake_case fields, and TypeScript safety."}
+{"file": ".trellis/spec/guides/index.md", "reason": "Cross-layer review guidance for API-to-state data flow."}

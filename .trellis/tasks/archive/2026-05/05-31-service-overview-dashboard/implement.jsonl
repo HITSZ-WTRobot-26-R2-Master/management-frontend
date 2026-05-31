@@ -1,0 +1,8 @@
+{"file": ".trellis/spec/frontend/index.md", "reason": "Fixed frontend stack and pre-development checklist."}
+{"file": ".trellis/spec/frontend/directory-structure.md", "reason": "Place dashboard components, hooks, state, and API usage in the established layout."}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "Build dashboard UI consistently and preserve accessibility/state semantics."}
+{"file": ".trellis/spec/frontend/hook-guidelines.md", "reason": "Follow data-fetching hook conventions for service loading."}
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "Use existing Jotai atoms consistently for statuses, definitions, selection, and errors."}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "Respect safety boundaries and quality gates."}
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "Use backend DTOs with snake_case fields and no unsafe conversions."}
+{"file": ".trellis/spec/guides/index.md", "reason": "Cross-layer thinking guidance for API-to-state-to-UI flow."}

@@ -1,0 +1,8 @@
+{"file": ".trellis/spec/frontend/index.md", "reason": "Verify final frontend stack and checklist compliance."}
+{"file": ".trellis/spec/frontend/directory-structure.md", "reason": "Sync final source/test layout conventions."}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "Polish UI and verify shadcn/component rules."}
+{"file": ".trellis/spec/frontend/hook-guidelines.md", "reason": "Sync final hook/API/WebSocket conventions."}
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "Sync final Jotai and server-state conventions."}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "Finalize quality gates, tests, and safety boundaries."}
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "Verify DTO/test/type safety conventions."}
+{"file": ".trellis/spec/guides/index.md", "reason": "Cross-layer and reuse thinking for final audit."}
