@@ -1,8 +1,0 @@
-{"file": ".trellis/spec/frontend/index.md", "reason": "Fixed frontend stack and pre-development checklist."}
-{"file": ".trellis/spec/frontend/directory-structure.md", "reason": "Place WebSocket hook/reducer/activity UI in the established layout."}
-{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "Build connection state and activity UI consistently."}
-{"file": ".trellis/spec/frontend/hook-guidelines.md", "reason": "Follow hook conventions for WebSocket lifecycle and REST fallback."}
-{"file": ".trellis/spec/frontend/state-management.md", "reason": "Update statuses, recent events, and connection state via Jotai consistently."}
-{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "Respect safety boundaries and token secrecy."}
-{"file": ".trellis/spec/frontend/type-safety.md", "reason": "Use ManagementEvent DTOs and safe unknown event handling."}
-{"file": ".trellis/spec/guides/index.md", "reason": "Cross-layer thinking guidance for event-to-state flow."}

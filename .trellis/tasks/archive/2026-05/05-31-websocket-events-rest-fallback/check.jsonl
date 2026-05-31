@@ -1,8 +1,0 @@
-{"file": ".trellis/spec/frontend/index.md", "reason": "Verify fixed stack and checklist compliance."}
-{"file": ".trellis/spec/frontend/directory-structure.md", "reason": "Verify WebSocket/activity code follows established layout."}
-{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "Verify connection/activity UI quality."}
-{"file": ".trellis/spec/frontend/hook-guidelines.md", "reason": "Verify WebSocket lifecycle and fallback conventions."}
-{"file": ".trellis/spec/frontend/state-management.md", "reason": "Verify Jotai state updates and recent event management."}
-{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "Verify safety boundaries and token secrecy."}
-{"file": ".trellis/spec/frontend/type-safety.md", "reason": "Verify event DTO handling and unknown event safety."}
-{"file": ".trellis/spec/guides/index.md", "reason": "Cross-layer review guidance for realtime state flow."}

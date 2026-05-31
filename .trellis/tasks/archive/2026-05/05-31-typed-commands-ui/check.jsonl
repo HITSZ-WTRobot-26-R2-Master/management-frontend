@@ -1,8 +1,0 @@
-{"file": ".trellis/spec/frontend/index.md", "reason": "Verify fixed stack and checklist compliance."}
-{"file": ".trellis/spec/frontend/directory-structure.md", "reason": "Verify command files follow established layout."}
-{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "Verify command UI quality/accessibility."}
-{"file": ".trellis/spec/frontend/hook-guidelines.md", "reason": "Verify command discovery/submission hook conventions."}
-{"file": ".trellis/spec/frontend/state-management.md", "reason": "Verify command state consistency."}
-{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "Verify safety boundaries and quality gates."}
-{"file": ".trellis/spec/frontend/type-safety.md", "reason": "Verify typed payload construction and DTO usage."}
-{"file": ".trellis/spec/guides/index.md", "reason": "Cross-layer review guidance for command workflows."}

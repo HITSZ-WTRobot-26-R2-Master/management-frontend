@@ -1,8 +1,0 @@
-{"file": ".trellis/spec/frontend/index.md", "reason": "Frontend guideline index and status for stack convention updates."}
-{"file": ".trellis/spec/frontend/directory-structure.md", "reason": "Directory conventions must be made concrete while scaffolding the app."}
-{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "Component and shadcn generation rules must be documented."}
-{"file": ".trellis/spec/frontend/hook-guidelines.md", "reason": "Hook/data-fetching conventions for later MVP tasks should be established."}
-{"file": ".trellis/spec/frontend/state-management.md", "reason": "Jotai and state boundary conventions must be recorded."}
-{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "Quality scripts and forbidden management UI patterns must be documented."}
-{"file": ".trellis/spec/frontend/type-safety.md", "reason": "TypeScript and backend snake_case DTO conventions must be recorded."}
-{"file": ".trellis/spec/guides/index.md", "reason": "General Trellis thinking guides for cross-layer and reuse checks."}

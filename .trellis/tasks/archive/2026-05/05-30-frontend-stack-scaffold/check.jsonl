@@ -1,8 +1,0 @@
-{"file": ".trellis/spec/frontend/index.md", "reason": "Verify frontend guideline index and stack convention updates."}
-{"file": ".trellis/spec/frontend/directory-structure.md", "reason": "Verify directory conventions match scaffold."}
-{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "Verify component and shadcn generation rules."}
-{"file": ".trellis/spec/frontend/hook-guidelines.md", "reason": "Verify hook/data-fetching conventions are established."}
-{"file": ".trellis/spec/frontend/state-management.md", "reason": "Verify Jotai state conventions are established."}
-{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "Verify quality scripts and safety boundary documentation."}
-{"file": ".trellis/spec/frontend/type-safety.md", "reason": "Verify TypeScript and DTO convention documentation."}
-{"file": ".trellis/spec/guides/index.md", "reason": "General Trellis quality and cross-layer review guidance."}
