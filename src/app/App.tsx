@@ -35,6 +35,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react"
 import {
@@ -55,6 +56,11 @@ import {
 } from "@/hooks/useCommandDiscovery"
 import { useEventStream } from "@/hooks/useEventStream"
 import {
+  DEFAULT_SERVICE_LOG_TAIL,
+  normalizeServiceLogTail,
+} from "@/lib/service-log-stream"
+import {
+  type ServiceLogsState,
   type ServiceLogOptions,
   useSelectedServiceDiagnostics,
 } from "@/hooks/useSelectedServiceDiagnostics"
@@ -98,7 +104,6 @@ import type {
   RestartRequestedPayload,
   RestartResponse,
   ServiceDefinition,
-  ServiceLogsResponse,
   ServiceRiskLevel,
   ServiceStats,
   ServiceStatus,
@@ -2149,7 +2154,7 @@ function ServiceInspector({
   services: ServiceStatus[]
 }) {
   const [logOptions, setLogOptions] = useState<ServiceLogOptions>({
-    tail: 200,
+    tail: DEFAULT_SERVICE_LOG_TAIL,
     stdout: true,
     stderr: true,
     timestamps: true,
@@ -2287,12 +2292,8 @@ function ServiceInspector({
 
           {activeDetailTab === "logs" ? (
             <LogsPanel
-              logs={diagnostics.logs.data}
+              logs={diagnostics.logs}
               options={logOptions}
-              error={diagnostics.logs.error}
-              loading={diagnostics.logs.loading}
-              refreshing={diagnostics.logs.refreshing}
-              loadedAt={diagnostics.logs.loadedAt}
               service={detailService}
               onRefresh={diagnostics.refreshLogs}
               onUpdateOptions={setLogOptions}
@@ -2690,39 +2691,82 @@ function RosListPanel({
 }
 
 function LogsPanel({
-  error,
-  loadedAt,
-  loading,
   logs,
   options,
-  refreshing,
   service,
   onRefresh,
   onUpdateOptions,
 }: {
-  error: ApiError | null
-  loadedAt: string | null
-  loading: boolean
-  logs: ServiceLogsResponse | null
+  logs: ServiceLogsState
   options: ServiceLogOptions
-  refreshing: boolean
   service: ServiceStatus | null
   onRefresh: () => void
   onUpdateOptions: (options: ServiceLogOptions) => void
 }) {
-  const busy = loading || refreshing
+  const logViewportRef = useRef<HTMLPreElement | null>(null)
+  const [autoFollow, setAutoFollow] = useState(true)
+  const busy = logs.loading || logs.refreshing
+  const lines = logs.data?.lines ?? []
+  const containerName = logs.data?.container_name ?? service?.container_name ?? null
+  const streamState = getServiceLogStreamStateCopy(logs)
+
+  useEffect(() => {
+    setAutoFollow(true)
+  }, [
+    options.stderr,
+    options.stdout,
+    options.tail,
+    options.timestamps,
+    service?.service_name,
+  ])
+
+  useEffect(() => {
+    if (!autoFollow) {
+      return
+    }
+
+    const viewport = logViewportRef.current
+    if (!viewport) {
+      return
+    }
+
+    viewport.scrollTop = viewport.scrollHeight
+  }, [autoFollow, lines.length, logs.status])
+
+  const handleLogScroll = useCallback(() => {
+    const viewport = logViewportRef.current
+    if (!viewport) {
+      return
+    }
+
+    setAutoFollow(isScrolledNearBottom(viewport))
+  }, [])
 
   return (
     <section className="rounded-lg border border-border bg-card p-5 shadow-sm">
-      <PanelHeader
-        detail={
-          logs
-            ? `${logs.container_name} 返回 ${logs.lines.length} 行`
-            : "有界 Docker 容器日志"
-        }
-        icon={FileText}
-        title="Docker 日志"
-      />
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <PanelHeader
+          detail={
+            containerName
+              ? `${containerName}，缓存 ${lines.length}/${logs.acceptedTail} 行`
+              : "有界实时 Docker 容器日志"
+          }
+          icon={FileText}
+          title="Docker 日志"
+        />
+        <span
+          className={cn(
+            "inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs font-semibold",
+            streamState.className,
+          )}
+        >
+          <streamState.icon
+            aria-hidden="true"
+            className={cn("size-3.5", busy && "animate-spin")}
+          />
+          {streamState.label}
+        </span>
+      </div>
       <div className="mt-4 grid gap-3 sm:grid-cols-[120px_1fr]">
         <label className="grid gap-2">
           <span className="text-xs font-semibold uppercase text-muted-foreground">
@@ -2774,22 +2818,48 @@ function LogsPanel({
               aria-hidden="true"
               className={cn("size-4", busy && "animate-spin")}
             />
-            刷新日志
+            重新连接
           </button>
         </div>
       </div>
 
-      {error ? <PanelError error={error} /> : null}
+      {logs.error ? <PanelError error={logs.error} /> : null}
+      <dl className="mt-4 grid gap-3 text-sm md:grid-cols-4">
+        <DetailItem
+          label="连接状态"
+          value={streamState.label}
+        />
+        <DetailItem
+          label="接受尾部"
+          value={`${logs.acceptedTail} 行`}
+        />
+        <DetailItem
+          label="自动跟随"
+          value={autoFollow ? "开启" : "已暂停"}
+        />
+        <DetailItem
+          label="最新日志"
+          value={logs.lastLineAt ? formatTimestamp(logs.lastLineAt) : "等待"}
+        />
+      </dl>
       <p className="mt-4 text-xs text-muted-foreground">
-        日志是{" "}
-        <code>{service?.service_name ?? "未选择服务"}</code> 的非结构化 Docker 容器输出
-        {loadedAt ? `，加载时间 ${formatTimestamp(loadedAt)}` : ""}。
+        日志是 <code>{service?.service_name ?? "未选择服务"}</code>{" "}
+        的非结构化 Docker 容器输出
+        {logs.openedAt ? `，实时连接 ${formatTimestamp(logs.openedAt)}` : ""}
+        {logs.loadedAt && !logs.openedAt
+          ? `，加载时间 ${formatTimestamp(logs.loadedAt)}`
+          : ""}
+        {logs.streamReason ? `。${formatServiceLogStreamReason(logs.streamReason)}` : ""}。
       </p>
-      <pre className="mt-3 h-[420px] overflow-auto rounded-md border border-zinc-800 bg-zinc-950 p-3 text-xs leading-relaxed text-zinc-100">
-        {logs && logs.lines.length > 0
-          ? logs.lines.join("\n")
+      <pre
+        ref={logViewportRef}
+        className="mt-3 h-[420px] overflow-auto rounded-md border border-zinc-800 bg-zinc-950 p-3 text-xs leading-relaxed text-zinc-100"
+        onScroll={handleLogScroll}
+      >
+        {lines.length > 0
+          ? lines.join("\n")
           : service
-            ? "当前选项未返回日志行。"
+            ? getEmptyLogText(logs.status)
             : "选择已注册服务后加载 Docker 日志。"}
       </pre>
     </section>
@@ -3380,11 +3450,111 @@ function formatBytes(value: number) {
 }
 
 function clampLogTail(value: number) {
-  if (!Number.isFinite(value)) {
-    return 200
+  return normalizeServiceLogTail(value)
+}
+
+function isScrolledNearBottom(element: HTMLElement) {
+  const remaining = element.scrollHeight - element.scrollTop - element.clientHeight
+
+  return remaining <= 24
+}
+
+function getServiceLogStreamStateCopy(logs: ServiceLogsState): {
+  className: string
+  icon: LucideIcon
+  label: string
+} {
+  if (logs.status === "live") {
+    return {
+      className: "border-emerald-200 bg-emerald-50 text-emerald-800",
+      icon: Wifi,
+      label: "实时日志",
+    }
   }
 
-  return Math.min(1000, Math.max(1, Math.round(value)))
+  if (logs.status === "connecting") {
+    return {
+      className: "border-sky-200 bg-sky-50 text-sky-800",
+      icon: LoaderCircle,
+      label: "正在连接",
+    }
+  }
+
+  if (logs.status === "fallback") {
+    return {
+      className: "border-amber-200 bg-amber-50 text-amber-900",
+      icon: RefreshCw,
+      label: "REST 回退",
+    }
+  }
+
+  if (logs.status === "ended") {
+    return {
+      className: "border-zinc-200 bg-zinc-50 text-zinc-700",
+      icon: WifiOff,
+      label: "日志流结束",
+    }
+  }
+
+  if (logs.status === "auth_required") {
+    return {
+      className: "border-amber-200 bg-amber-50 text-amber-900",
+      icon: KeyRound,
+      label: "需要令牌",
+    }
+  }
+
+  if (logs.status === "error") {
+    return {
+      className: "border-red-200 bg-red-50 text-red-800",
+      icon: XCircle,
+      label: "日志流错误",
+    }
+  }
+
+  return {
+    className: "border-zinc-200 bg-zinc-50 text-zinc-700",
+    icon: FileText,
+    label: "未连接",
+  }
+}
+
+function getEmptyLogText(status: ServiceLogsState["status"]) {
+  if (status === "connecting") {
+    return "正在连接服务日志流，等待后端发送初始尾部日志。"
+  }
+
+  if (status === "live") {
+    return "当前选项未返回历史日志，正在等待新日志行。"
+  }
+
+  if (status === "ended") {
+    return "服务日志流已结束，当前没有可显示的日志行。"
+  }
+
+  if (status === "fallback") {
+    return "实时日志连接不可用，REST 回退未返回日志行。"
+  }
+
+  if (status === "auth_required") {
+    return "管理后端需要令牌后才能打开服务日志流。"
+  }
+
+  if (status === "error") {
+    return "服务日志流打开失败。"
+  }
+
+  return "当前选项未返回日志行。"
+}
+
+function formatServiceLogStreamReason(reason: string) {
+  const knownReasonLabels: Record<string, string> = {
+    container_exited: "容器已退出",
+    container_missing: "容器不存在",
+    docker_stream_ended: "Docker 日志流结束",
+  }
+
+  return knownReasonLabels[reason] ?? reason
 }
 
 function parseNumberInput(value: string) {

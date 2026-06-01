@@ -7,6 +7,7 @@ import { reduceServiceStatusesForEvent } from "../src/lib/event-reducer"
 import {
   buildManagementHttpUrl,
   buildManagementWebSocketUrl,
+  buildServiceLogWebSocketUrl,
   isAbortError,
   isServiceStatus,
   isValidManagementBaseUrl,
@@ -14,6 +15,14 @@ import {
   ManagementApiClient,
   parseApiError,
 } from "../src/lib/management-api"
+import {
+  appendBoundedServiceLogLine,
+  DEFAULT_SERVICE_LOG_TAIL,
+  isServiceLogWebSocketMessage,
+  normalizeServiceLogTail,
+  parseServiceLogWebSocketMessage,
+  trimServiceLogLines,
+} from "../src/lib/service-log-stream"
 import {
   isServiceNotFoundError,
   removeStaleServiceStatus,
@@ -168,11 +177,153 @@ describe("management API URL helpers", () => {
     }
   })
 
+  test("builds service log WebSocket URLs with encoded service and default tail", () => {
+    const previousLocation = globalThis.location
+
+    Object.defineProperty(globalThis, "location", {
+      configurable: true,
+      value: {
+        origin: "https://operator.local",
+      },
+    })
+
+    try {
+      expect(
+        buildServiceLogWebSocketUrl(
+          "/management-api",
+          "token value",
+          "lidar/pose publisher",
+          {
+            stdout: false,
+            stderr: true,
+            timestamps: false,
+          },
+        ),
+      ).toBe(
+        "wss://operator.local/management-api/ws/services/lidar%2Fpose%20publisher/logs?token=token+value&tail=1000&stdout=false&stderr=true&timestamps=false",
+      )
+    } finally {
+      Object.defineProperty(globalThis, "location", {
+        configurable: true,
+        value: previousLocation,
+      })
+    }
+  })
+
+  test("preserves the existing events WebSocket helper behavior", () => {
+    expect(
+      buildManagementWebSocketUrl("http://127.0.0.1:8080", "change-me"),
+    ).toBe("ws://127.0.0.1:8080/ws/events?token=change-me")
+  })
+
   test("accepts only HTTP(S) URLs or same-origin proxy paths", () => {
     expect(isValidManagementBaseUrl("http://192.168.31.52:8080")).toBe(true)
     expect(isValidManagementBaseUrl("/management-api")).toBe(true)
     expect(isValidManagementBaseUrl("ftp://192.168.31.52:8080")).toBe(false)
     expect(isValidManagementBaseUrl("//192.168.31.52:8080")).toBe(false)
+  })
+})
+
+describe("service log stream helpers", () => {
+  test("uses 1000 as the frontend default service log tail", () => {
+    expect(DEFAULT_SERVICE_LOG_TAIL).toBe(1000)
+    expect(normalizeServiceLogTail(Number.NaN)).toBe(1000)
+  })
+
+  test("validates service log WebSocket contract messages", () => {
+    expect(
+      isServiceLogWebSocketMessage({
+        type: "service_log_opened",
+        service: "lidar_pose_publisher",
+        container_name: "r2_lidar_pose_publisher",
+        tail: 1000,
+        stdout: true,
+        stderr: true,
+        timestamps: true,
+        time: "2026-06-01T11:55:00Z",
+      }),
+    ).toBe(true)
+
+    expect(
+      isServiceLogWebSocketMessage({
+        type: "service_log_line",
+        service: "lidar_pose_publisher",
+        container_name: "r2_lidar_pose_publisher",
+        stream: "stdout",
+        line: "pose node started",
+        time: "2026-06-01T11:55:01Z",
+      }),
+    ).toBe(true)
+
+    expect(
+      isServiceLogWebSocketMessage({
+        type: "service_log_error",
+        service: "lidar_pose_publisher",
+        code: "docker_operation_failed",
+        message: "Docker log stream failed",
+        time: "2026-06-01T11:55:02Z",
+      }),
+    ).toBe(true)
+
+    expect(
+      isServiceLogWebSocketMessage({
+        type: "service_log_stream_ended",
+        service: "lidar_pose_publisher",
+        container_name: "r2_lidar_pose_publisher",
+        reason: "container_exited",
+        time: "2026-06-01T11:55:03Z",
+      }),
+    ).toBe(true)
+
+    expect(
+      isServiceLogWebSocketMessage({
+        type: "service_log_line",
+        service: "lidar_pose_publisher",
+        line: "missing required fields",
+      }),
+    ).toBe(false)
+  })
+
+  test("parses JSON service log frames and ignores unknown message types", () => {
+    expect(
+      parseServiceLogWebSocketMessage(
+        JSON.stringify({
+          type: "service_log_line",
+          service: "lidar_pose_publisher",
+          container_name: "r2_lidar_pose_publisher",
+          stream: "stderr",
+          line: "warning",
+          time: "2026-06-01T11:55:01Z",
+        }),
+      ),
+    ).toMatchObject({
+      type: "service_log_line",
+      stream: "stderr",
+      line: "warning",
+    })
+
+    expect(
+      parseServiceLogWebSocketMessage(
+        JSON.stringify({
+          type: "future_log_message",
+          service: "lidar_pose_publisher",
+        }),
+      ),
+    ).toBeNull()
+    expect(parseServiceLogWebSocketMessage("{")).toBeNull()
+  })
+
+  test("trims service log buffers from the top", () => {
+    expect(trimServiceLogLines(["1", "2", "3", "4"], 3)).toEqual([
+      "2",
+      "3",
+      "4",
+    ])
+    expect(appendBoundedServiceLogLine(["1", "2", "3"], "4", 3)).toEqual([
+      "2",
+      "3",
+      "4",
+    ])
   })
 })
 

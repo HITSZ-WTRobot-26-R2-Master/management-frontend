@@ -159,6 +159,57 @@ export interface ServiceLogsResponse {
   lines: string[]
 }
 
+export type ServiceLogMessageType =
+  | "service_log_opened"
+  | "service_log_line"
+  | "service_log_error"
+  | "service_log_stream_ended"
+
+export type ServiceLogOutputStream = "stdout" | "stderr" | "unknown" | string
+
+export interface ServiceLogOpenedMessage {
+  type: "service_log_opened"
+  service: string
+  container_name: string
+  tail: number
+  stdout: boolean
+  stderr: boolean
+  timestamps: boolean
+  time: string
+}
+
+export interface ServiceLogLineMessage {
+  type: "service_log_line"
+  service: string
+  container_name: string
+  stream: ServiceLogOutputStream
+  line: string
+  time: string
+}
+
+export interface ServiceLogErrorMessage {
+  type: "service_log_error"
+  service: string
+  container_name?: string
+  code: ApiErrorCode
+  message: string
+  time: string
+}
+
+export interface ServiceLogStreamEndedMessage {
+  type: "service_log_stream_ended"
+  service: string
+  container_name: string
+  reason: string
+  time: string
+}
+
+export type ServiceLogWebSocketMessage =
+  | ServiceLogOpenedMessage
+  | ServiceLogLineMessage
+  | ServiceLogErrorMessage
+  | ServiceLogStreamEndedMessage
+
 export interface ServiceStats {
   cpu_percent: number
   memory_usage_bytes: number

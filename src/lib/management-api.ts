@@ -23,6 +23,7 @@ import type {
   ServiceStats,
   ServiceStatus,
 } from "@/types/management"
+import { DEFAULT_SERVICE_LOG_TAIL } from "@/lib/service-log-stream"
 
 export const DEFAULT_MANAGEMENT_BASE_URL = "/management-api"
 
@@ -78,6 +79,13 @@ interface RequestErrorContext {
   baseUrl: string
   method: string
   requestUrl: string
+}
+
+interface ServiceLogWebSocketOptions {
+  tail?: number
+  stdout?: boolean
+  stderr?: boolean
+  timestamps?: boolean
 }
 
 type Validator<T> = (value: unknown) => value is T
@@ -347,8 +355,43 @@ export function buildManagementHttpUrl(baseUrl: string, path: string) {
 }
 
 export function buildManagementWebSocketUrl(baseUrl: string, token: string) {
+  return buildManagementWebSocketEndpointUrl(
+    baseUrl,
+    "/ws/events",
+    token,
+  ).toString()
+}
+
+export function buildServiceLogWebSocketUrl(
+  baseUrl: string,
+  token: string,
+  serviceName: string,
+  options: ServiceLogWebSocketOptions = {},
+) {
+  const url = buildManagementWebSocketEndpointUrl(
+    baseUrl,
+    `/ws/services/${encodeURIComponent(serviceName)}/logs`,
+    token,
+  )
+
+  url.searchParams.set(
+    "tail",
+    (options.tail ?? DEFAULT_SERVICE_LOG_TAIL).toString(),
+  )
+  url.searchParams.set("stdout", (options.stdout ?? true).toString())
+  url.searchParams.set("stderr", (options.stderr ?? true).toString())
+  url.searchParams.set("timestamps", (options.timestamps ?? true).toString())
+
+  return url.toString()
+}
+
+function buildManagementWebSocketEndpointUrl(
+  baseUrl: string,
+  path: string,
+  token: string,
+) {
   const url = new URL(
-    buildManagementHttpUrl(baseUrl, "/ws/events"),
+    buildManagementHttpUrl(baseUrl, path),
     getCurrentBrowserOrigin(),
   )
 
@@ -369,7 +412,7 @@ export function buildManagementWebSocketUrl(baseUrl: string, token: string) {
     url.searchParams.set("token", trimmedToken)
   }
 
-  return url.toString()
+  return url
 }
 
 function isRelativeManagementBaseUrl(baseUrl: string) {
