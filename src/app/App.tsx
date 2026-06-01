@@ -353,6 +353,7 @@ function ConnectionSettings({ onRefresh }: { onRefresh: () => void }) {
   const [token, setToken] = useAtom(authTokenAtom)
   const client = useAtomValue(managementApiClientAtom)
   const [connectionState, setConnectionState] = useAtom(connectionStateAtom)
+  const latestError = useAtomValue(latestErrorAtom)
   const setLatestError = useSetAtom(latestErrorAtom)
   const clearAuthToken = useSetAtom(clearAuthTokenAtom)
   const [baseUrlDraft, setBaseUrlDraft] = useState(baseUrl)
@@ -501,7 +502,33 @@ function ConnectionSettings({ onRefresh }: { onRefresh: () => void }) {
           token 查询参数。
         </p>
       </div>
+      {latestError ? <ConnectionErrorNotice error={latestError} /> : null}
     </section>
+  )
+}
+
+function ConnectionErrorNotice({ error }: { error: ApiError }) {
+  const copy = getErrorStateCopy(error)
+  const Icon = copy.icon
+
+  return (
+    <div className="border-t border-border px-5 py-4">
+      <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900">
+        <div className="flex items-start gap-3">
+          <Icon
+            aria-hidden="true"
+            className={cn("mt-0.5 size-4 shrink-0", copy.iconClass)}
+          />
+          <div className="min-w-0">
+            <p className="font-semibold">{copy.title}</p>
+            <p className="mt-1 break-words text-red-800">{copy.body}</p>
+            <p className="mt-2 break-words rounded-md border border-red-200 bg-white/60 px-3 py-2 font-mono text-xs text-red-900">
+              {formatApiError(error)}
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
   )
 }
 
@@ -3318,6 +3345,15 @@ function getErrorStateCopy(error: ApiError): {
       icon: Container,
       iconClass: "text-red-700",
       title: "Docker 操作失败",
+    }
+  }
+
+  if (error.code === "request_failed") {
+    return {
+      body: error.message,
+      icon: AlertTriangle,
+      iconClass: "text-red-700",
+      title: "管理请求失败",
     }
   }
 

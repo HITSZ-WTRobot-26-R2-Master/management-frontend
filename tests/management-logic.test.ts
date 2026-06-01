@@ -10,6 +10,8 @@ import {
   isAbortError,
   isServiceStatus,
   isValidManagementBaseUrl,
+  ManagementApiError,
+  ManagementApiClient,
   parseApiError,
 } from "../src/lib/management-api"
 import {
@@ -53,6 +55,78 @@ describe("management API errors", () => {
     expect(parseApiError({ message: "missing code" }, 503)).toEqual({
       code: "request_failed",
       message: "管理后端请求失败，HTTP 503",
+    })
+  })
+
+  test("includes request context when structured HTTP errors are missing", () => {
+    expect(
+      parseApiError(
+        { message: "missing code" },
+        500,
+        {
+          baseUrl: "/management-api",
+          method: "GET",
+          requestUrl: "/management-api/readyz",
+        },
+      ),
+    ).toEqual({
+      code: "request_failed",
+      message:
+        "GET /management-api/readyz 返回 HTTP 500，且响应不是管理后端结构化错误。 当前使用同源代理路径 /management-api；若在 Vite 开发服务器下运行，请检查 VITE_MANAGEMENT_PROXY_TARGET 是否指向正在运行的 management backend。",
+    })
+  })
+
+  test("wraps browser network failures with request context", async () => {
+    const client = new ManagementApiClient({
+      baseUrl: "/management-api",
+      fetchImpl: async () => {
+        throw new TypeError("Failed to fetch")
+      },
+    })
+
+    await expect(client.getReadiness()).rejects.toBeInstanceOf(ManagementApiError)
+    await expect(client.getReadiness()).rejects.toMatchObject({
+      apiError: {
+        code: "request_failed",
+        message:
+          "GET /management-api/readyz 未收到可读的管理后端响应。 当前使用同源代理路径 /management-api；若在 Vite 开发服务器下运行，请检查 VITE_MANAGEMENT_PROXY_TARGET 是否指向正在运行的 management backend。 浏览器异常：Failed to fetch",
+      },
+    })
+  })
+
+  test("calls browser fetch with the global receiver", async () => {
+    const browserLikeFetch = function (this: typeof globalThis) {
+      if (this !== globalThis) {
+        throw new TypeError("Illegal invocation")
+      }
+
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            status: "ready",
+            bind_address: "0.0.0.0",
+            port: 8080,
+            agent_url: "http://127.0.0.1:8090",
+          }),
+          {
+            headers: {
+              "Content-Type": "application/json",
+            },
+            status: 200,
+          },
+        ),
+      )
+    } satisfies typeof fetch
+    const client = new ManagementApiClient({
+      baseUrl: "/management-api",
+      fetchImpl: browserLikeFetch,
+    })
+
+    await expect(client.getReadiness()).resolves.toEqual({
+      status: "ready",
+      bind_address: "0.0.0.0",
+      port: 8080,
+      agent_url: "http://127.0.0.1:8090",
     })
   })
 

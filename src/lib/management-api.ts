@@ -74,6 +74,12 @@ interface RequestOptions {
   signal?: AbortSignal
 }
 
+interface RequestErrorContext {
+  baseUrl: string
+  method: string
+  requestUrl: string
+}
+
 type Validator<T> = (value: unknown) => value is T
 
 export class ManagementApiClient {
@@ -89,7 +95,7 @@ export class ManagementApiClient {
   }: ManagementApiClientOptions = {}) {
     this.baseUrl = baseUrl
     this.token = token
-    this.fetchImpl = fetchImpl
+    this.fetchImpl = (input, init) => fetchImpl.call(globalThis, input, init)
   }
 
   getHealth(signal?: AbortSignal) {
@@ -213,18 +219,37 @@ export class ManagementApiClient {
     validator: Validator<T>,
     options: RequestOptions = {},
   ) {
-    const response = await this.fetchImpl(buildManagementHttpUrl(this.baseUrl, path), {
-      method: options.method ?? "GET",
-      headers: this.buildHeaders(options.body !== undefined),
-      body: options.body === undefined ? undefined : JSON.stringify(options.body),
-      signal: options.signal,
-    })
+    const requestUrl = buildManagementHttpUrl(this.baseUrl, path)
+    const method = options.method ?? "GET"
+    const requestContext = {
+      baseUrl: this.baseUrl,
+      method,
+      requestUrl,
+    }
+    let response: Response
+
+    try {
+      response = await this.fetchImpl(requestUrl, {
+        method,
+        headers: this.buildHeaders(options.body !== undefined),
+        body: options.body === undefined ? undefined : JSON.stringify(options.body),
+        signal: options.signal,
+      })
+    } catch (error) {
+      if (isAbortError(error)) {
+        throw error
+      }
+
+      throw new ManagementApiError(
+        buildBrowserRequestFailure(error, requestContext),
+      )
+    }
 
     const payload = await readJson(response)
 
     if (!response.ok) {
       throw new ManagementApiError(
-        parseApiError(payload, response.status),
+        parseApiError(payload, response.status, requestContext),
         response.status,
       )
     }
@@ -331,7 +356,7 @@ export function buildManagementWebSocketUrl(baseUrl: string, token: string) {
     url.protocol = "ws:"
   } else if (url.protocol === "https:") {
     url.protocol = "wss:"
-    } else {
+  } else {
     throw new ManagementApiError({
       code: "request_failed",
       message: "管理后端 URL 必须使用 http 或 https",
@@ -367,7 +392,7 @@ export function getApiError(error: unknown): ApiError {
   if (error instanceof TypeError) {
     return {
       code: "request_failed",
-      message: "当前浏览器无法访问管理后端",
+      message: `当前浏览器无法访问管理后端。浏览器异常：${error.message}`,
     }
   }
 
@@ -398,7 +423,11 @@ async function readJson(response: Response) {
   }
 }
 
-export function parseApiError(payload: unknown, status: number): ApiError {
+export function parseApiError(
+  payload: unknown,
+  status: number,
+  context?: RequestErrorContext,
+): ApiError {
   if (isApiError(payload)) {
     return payload
   }
@@ -409,8 +438,55 @@ export function parseApiError(payload: unknown, status: number): ApiError {
 
   return {
     code: "request_failed",
-    message: `管理后端请求失败，HTTP ${status}`,
+    message: buildHttpFailureMessage(status, context),
   }
+}
+
+function buildBrowserRequestFailure(
+  error: unknown,
+  context: RequestErrorContext,
+): ApiError {
+  const browserMessage =
+    error instanceof Error && error.message.length > 0
+      ? error.message
+      : "浏览器未返回可读的 HTTP 响应"
+
+  return {
+    code: "request_failed",
+    message: [
+      `${context.method} ${context.requestUrl} 未收到可读的管理后端响应。`,
+      describeBaseUrlFailureContext(context.baseUrl),
+      `浏览器异常：${browserMessage}`,
+    ]
+      .filter((line) => line.length > 0)
+      .join(" "),
+  }
+}
+
+function buildHttpFailureMessage(
+  status: number,
+  context?: RequestErrorContext,
+) {
+  if (!context) {
+    return `管理后端请求失败，HTTP ${status}`
+  }
+
+  return [
+    `${context.method} ${context.requestUrl} 返回 HTTP ${status}，且响应不是管理后端结构化错误。`,
+    describeBaseUrlFailureContext(context.baseUrl),
+  ]
+    .filter((line) => line.length > 0)
+    .join(" ")
+}
+
+function describeBaseUrlFailureContext(baseUrl: string) {
+  const normalizedBaseUrl = baseUrl.trim()
+
+  if (isRelativeManagementBaseUrl(normalizedBaseUrl)) {
+    return `当前使用同源代理路径 ${normalizedBaseUrl}；若在 Vite 开发服务器下运行，请检查 VITE_MANAGEMENT_PROXY_TARGET 是否指向正在运行的 management backend。`
+  }
+
+  return "请检查该后端 URL 是否可从当前浏览器所在机器访问，且后端 CORS/网络路径允许本页面来源。"
 }
 
 function isApiError(value: unknown): value is ApiError {
