@@ -1,5 +1,5 @@
 import { useAtomValue, useSetAtom } from "jotai"
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import {
   AUTH_REQUIRED_ERROR,
   getApiError,
@@ -13,6 +13,7 @@ import {
 import {
   authTokenAtom,
   baseUrlAtom,
+  connectionStateAtom,
   latestErrorAtom,
   managementApiClientAtom,
   selectedServiceNameAtom,
@@ -79,6 +80,7 @@ export function useSelectedServiceDiagnostics(
 ): SelectedServiceDiagnosticsState {
   const baseUrl = useAtomValue(baseUrlAtom)
   const client = useAtomValue(managementApiClientAtom)
+  const connectionStatus = useAtomValue(connectionStateAtom).status
   const token = useAtomValue(authTokenAtom)
   const setLatestError = useSetAtom(latestErrorAtom)
   const setSelectedServiceName = useSetAtom(selectedServiceNameAtom)
@@ -94,6 +96,7 @@ export function useSelectedServiceDiagnostics(
   const [stats, setStats] =
     useState<RequestState<ServiceStats>>(initialRequestState)
   const [restart, setRestart] = useState<RestartState>(initialRestartState)
+  const autoRetryKeyRef = useRef<string | null>(null)
 
   const refreshDetail = useCallback(() => {
     setDetailRefreshIndex((current) => current + 1)
@@ -195,7 +198,79 @@ export function useSelectedServiceDiagnostics(
     setLogs(initialRequestState)
     setStats(initialRequestState)
     setRestart(initialRestartState)
+    autoRetryKeyRef.current = null
   }, [serviceName])
+
+  useEffect(() => {
+    if (!serviceName || !hasToken || !isRecoverableConnection(connectionStatus)) {
+      return
+    }
+
+    const retryTargets = [
+      detail.error?.code === "request_failed" &&
+        !detail.loading &&
+        !detail.refreshing
+        ? "detail"
+        : null,
+      logs.error?.code === "request_failed" && !logs.loading && !logs.refreshing
+        ? "logs"
+        : null,
+      stats.error?.code === "request_failed" &&
+        !stats.loading &&
+        !stats.refreshing
+        ? "stats"
+        : null,
+    ].filter((target): target is string => target !== null)
+
+    if (retryTargets.length === 0) {
+      return
+    }
+
+    const retryKey = [
+      baseUrl,
+      token,
+      serviceName,
+      connectionStatus,
+      detail.loadedAt ?? "never",
+      logs.loadedAt ?? "never",
+      stats.loadedAt ?? "never",
+      retryTargets.join(","),
+    ].join("|")
+
+    if (autoRetryKeyRef.current === retryKey) {
+      return
+    }
+
+    autoRetryKeyRef.current = retryKey
+
+    if (retryTargets.includes("detail")) {
+      setDetailRefreshIndex((current) => current + 1)
+    }
+    if (retryTargets.includes("logs")) {
+      setLogsRefreshIndex((current) => current + 1)
+    }
+    if (retryTargets.includes("stats")) {
+      setStatsRefreshIndex((current) => current + 1)
+    }
+  }, [
+    baseUrl,
+    connectionStatus,
+    detail.error?.code,
+    detail.loadedAt,
+    detail.loading,
+    detail.refreshing,
+    hasToken,
+    logs.error?.code,
+    logs.loadedAt,
+    logs.loading,
+    logs.refreshing,
+    serviceName,
+    stats.error?.code,
+    stats.loadedAt,
+    stats.loading,
+    stats.refreshing,
+    token,
+  ])
 
   useEffect(() => {
     if (!serviceName) {
@@ -472,4 +547,8 @@ function replaceServiceStatus(
   return services.map((service, index) =>
     index === existingIndex ? nextService : service,
   )
+}
+
+function isRecoverableConnection(status: string) {
+  return status === "connected" || status === "fallback" || status === "live"
 }
