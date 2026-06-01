@@ -27,6 +27,7 @@ import {
   isServiceNotFoundError,
   removeStaleServiceStatus,
 } from "../src/lib/service-not-found-recovery"
+import { formatBytes, formatPercent } from "../src/lib/resource-format"
 import {
   formatRosSummary,
   getToneForOverallLevel,
@@ -345,6 +346,27 @@ describe("management API validators", () => {
         }),
       ),
     ).toBe(true)
+  })
+})
+
+describe("resource display formatting", () => {
+  test("keeps Docker CPU percentages as backend-provided percent values", () => {
+    expect(formatPercent(0.5)).toBe("0.5%")
+    expect(formatPercent(523.456)).toBe("523.5%")
+    expect(formatPercent(1200)).toBe("1200.0%")
+  })
+
+  test("uses stable binary byte units for memory and IO values", () => {
+    expect(formatBytes(512)).toBe("512 B")
+    expect(formatBytes(1024)).toBe("1.00 KiB")
+    expect(formatBytes(512 * 1024 * 1024)).toBe("512 MiB")
+    expect(formatBytes(1536 * 1024 * 1024)).toBe("1.50 GiB")
+    expect(formatBytes(3 * 1024 ** 4)).toBe("3.00 TiB")
+  })
+
+  test("returns a visible fallback for non-finite byte values", () => {
+    expect(formatBytes(Number.NaN)).toBe("未上报")
+    expect(formatBytes(Number.POSITIVE_INFINITY)).toBe("未上报")
   })
 })
 

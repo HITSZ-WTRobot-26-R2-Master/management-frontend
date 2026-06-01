@@ -59,6 +59,7 @@ import {
   DEFAULT_SERVICE_LOG_TAIL,
   normalizeServiceLogTail,
 } from "@/lib/service-log-stream"
+import { formatBytes, formatPercent } from "@/lib/resource-format"
 import {
   type ServiceLogsState,
   type ServiceLogOptions,
@@ -3433,20 +3434,6 @@ function formatRestartCount(value: number | null) {
 
 function formatBoolean(value: boolean) {
   return value ? "是" : "否"
-}
-
-function formatPercent(value: number) {
-  return `${value.toFixed(1)}%`
-}
-
-function formatBytes(value: number) {
-  return new Intl.NumberFormat(undefined, {
-    maximumFractionDigits: 1,
-    notation: "compact",
-    style: "unit",
-    unit: "byte",
-    unitDisplay: "narrow",
-  }).format(value)
 }
 
 function clampLogTail(value: number) {
