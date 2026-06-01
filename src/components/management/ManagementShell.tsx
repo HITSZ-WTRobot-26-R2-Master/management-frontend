@@ -8,6 +8,7 @@ import {
   Settings,
 } from "lucide-react"
 import type { ReactNode } from "react"
+import { NavLink } from "react-router-dom"
 import { cn } from "@/lib/utils"
 
 export type ManagementTab =
@@ -22,31 +23,32 @@ const navItems: Array<{
   id: ManagementTab
   label: string
   icon: typeof Gauge
+  to: string
 }> = [
-  { id: "overview", label: "总览", icon: Gauge },
-  { id: "services", label: "服务", icon: Boxes },
-  { id: "details", label: "详情", icon: ServerCog },
-  { id: "commands", label: "命令", icon: DatabaseZap },
-  { id: "events", label: "事件", icon: Bell },
-  { id: "settings", label: "设置", icon: Settings },
+  { id: "overview", label: "总览", icon: Gauge, to: "/overview" },
+  { id: "services", label: "服务", icon: Boxes, to: "/services" },
+  { id: "details", label: "详情", icon: ServerCog, to: "/services" },
+  { id: "commands", label: "命令", icon: DatabaseZap, to: "/commands" },
+  { id: "events", label: "事件", icon: Bell, to: "/events" },
+  { id: "settings", label: "设置", icon: Settings, to: "/settings" },
 ]
 
 interface ManagementShellProps {
-  activeTab: ManagementTab
   children: ReactNode
   connectionStatus: ReactNode
+  detailPath: string
+  detailsDisabled: boolean
   refreshing: boolean
   onRefresh: () => void
-  onTabChange: (tab: ManagementTab) => void
 }
 
 export function ManagementShell({
-  activeTab,
   children,
   connectionStatus,
+  detailPath,
+  detailsDisabled,
   refreshing,
   onRefresh,
-  onTabChange,
 }: ManagementShellProps) {
   return (
     <div className="flex h-[100dvh] min-h-0 overflow-hidden">
@@ -84,25 +86,33 @@ export function ManagementShell({
               role="tablist"
             >
               {navItems.map((item) => {
-                const active = item.id === activeTab
+                const to = item.id === "details" ? detailPath : item.to
+                const disabled = item.id === "details" && detailsDisabled
 
                 return (
-                  <button
+                  <NavLink
+                    aria-disabled={disabled}
+                    aria-label={disabled ? "详情：等待服务快照" : undefined}
+                    end={item.id !== "details"}
                     key={item.id}
-                    type="button"
-                    className={cn(
-                      "inline-flex h-9 items-center gap-2 rounded-md border px-3 text-sm font-medium",
-                      active
-                        ? "border-primary bg-primary text-primary-foreground"
-                        : "border-border bg-card text-muted-foreground hover:bg-muted hover:text-card-foreground",
-                    )}
-                    aria-selected={active}
+                    to={to}
                     role="tab"
-                    onClick={() => onTabChange(item.id)}
+                    className={({ isActive }) => {
+                      const active = isActive && !disabled
+
+                      return cn(
+                        "inline-flex h-9 items-center gap-2 rounded-md border px-3 text-sm font-medium",
+                        active
+                          ? "border-primary bg-primary text-primary-foreground"
+                          : "border-border bg-card text-muted-foreground hover:bg-muted hover:text-card-foreground",
+                        disabled &&
+                          "pointer-events-none cursor-not-allowed opacity-60",
+                      )
+                    }}
                   >
                     <item.icon aria-hidden="true" className="size-4" />
                     {item.label}
-                  </button>
+                  </NavLink>
                 )
               })}
             </nav>

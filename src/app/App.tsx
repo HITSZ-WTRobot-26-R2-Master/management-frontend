@@ -33,13 +33,19 @@ import {
   type FormEvent,
   type ReactNode,
   useCallback,
+  useEffect,
   useMemo,
   useState,
 } from "react"
 import {
-  type ManagementTab,
-  ManagementShell,
-} from "@/components/management/ManagementShell"
+  BrowserRouter,
+  Navigate,
+  Route,
+  Routes,
+  useNavigate,
+  useParams,
+} from "react-router-dom"
+import { ManagementShell } from "@/components/management/ManagementShell"
 import {
   type CommandDiscoveryState,
   type CommandSubmissionState,
@@ -236,11 +242,27 @@ const detailTabs: Array<{
   { id: "restart", label: "重启", icon: RotateCcw },
 ]
 
+function decodeRouteParam(value: string) {
+  try {
+    return decodeURIComponent(value)
+  } catch {
+    return value
+  }
+}
+
 export function App() {
+  return (
+    <BrowserRouter>
+      <ManagementApp />
+    </BrowserRouter>
+  )
+}
+
+function ManagementApp() {
   const services = useAtomValue(serviceStatusesAtom)
   const selectedService = useAtomValue(selectedServiceAtom)
-  const selectedDefinition = useAtomValue(selectedServiceDefinitionAtom)
   const setSelectedServiceName = useSetAtom(selectedServiceNameAtom)
+  const navigate = useNavigate()
   const connectionState = useAtomValue(connectionStateAtom)
   const snapshot = useServicesSnapshot()
   const commandDiscovery = useCommandDiscovery()
@@ -258,11 +280,13 @@ export function App() {
     category: allFilterValue,
     risk: allFilterValue,
   })
-  const [activeTab, setActiveTab] = useState<ManagementTab>("overview")
   const filteredServices = useMemo(
     () => filterServices(services, filters),
     [filters, services],
   )
+  const detailPath = selectedService
+    ? `/services/${encodeURIComponent(selectedService.service_name)}`
+    : "/services"
   const refreshing =
     snapshot.refreshing ||
     commandDiscovery.discovery.refreshing ||
@@ -278,73 +302,128 @@ export function App() {
   const handleOpenServiceDetails = useCallback(
     (serviceName: string) => {
       setSelectedServiceName(serviceName)
-      setActiveTab("details")
+      navigate(`/services/${encodeURIComponent(serviceName)}`)
     },
-    [setSelectedServiceName],
+    [navigate, setSelectedServiceName],
   )
 
   return (
     <ManagementShell
-      activeTab={activeTab}
       connectionStatus={<ConnectionBadge state={connectionState} />}
+      detailPath={detailPath}
+      detailsDisabled={services.length === 0}
       refreshing={refreshing}
       onRefresh={refreshManagementData}
-      onTabChange={setActiveTab}
     >
       <div className="flex h-full min-h-0 flex-col overflow-hidden">
-        {activeTab === "overview" ? (
-          <OverviewTab
-            eventStream={eventStream}
-            lastLoadedAt={snapshot.lastLoadedAt}
-            services={services}
-            onOpenEvents={() => setActiveTab("events")}
-            onOpenServices={() => setActiveTab("services")}
+        <Routes>
+          <Route path="/" element={<Navigate replace to="/overview" />} />
+          <Route
+            path="/overview"
+            element={
+              <OverviewTab
+                eventStream={eventStream}
+                lastLoadedAt={snapshot.lastLoadedAt}
+                services={services}
+                onOpenEvents={() => navigate("/events")}
+                onOpenServices={() => navigate("/services")}
+              />
+            }
           />
-        ) : null}
-
-        {activeTab === "services" ? (
-          <ServiceOverview
-            definitionsError={snapshot.definitionsError}
-            error={snapshot.error}
-            filteredServices={filteredServices}
-            filters={filters}
-            loading={snapshot.loading}
-            onRefresh={snapshot.refresh}
-            selectedServiceName={selectedService?.service_name ?? ""}
-            services={services}
-            refreshing={snapshot.refreshing}
-            setFilters={setFilters}
-            onOpenDetails={handleOpenServiceDetails}
-            onSelectService={handleSelectService}
+          <Route
+            path="/services"
+            element={
+              <ServiceOverview
+                definitionsError={snapshot.definitionsError}
+                error={snapshot.error}
+                filteredServices={filteredServices}
+                filters={filters}
+                loading={snapshot.loading}
+                onRefresh={snapshot.refresh}
+                selectedServiceName={selectedService?.service_name ?? ""}
+                services={services}
+                refreshing={snapshot.refreshing}
+                setFilters={setFilters}
+                onOpenDetails={handleOpenServiceDetails}
+                onSelectService={handleSelectService}
+              />
+            }
           />
-        ) : null}
-
-        {activeTab === "details" ? (
-          <ServiceInspector
-            definition={selectedDefinition}
-            onServiceNotFound={snapshot.refresh}
-            service={selectedService}
+          <Route
+            path="/services/:serviceName"
+            element={
+              <ServiceDetailsRoute
+                onServiceNotFound={snapshot.refresh}
+                services={services}
+              />
+            }
           />
-        ) : null}
-
-        {activeTab === "commands" ? (
-          <CommandsPanel
-            discovery={commandDiscovery.discovery}
-            submission={commandDiscovery.submission}
-            onRefresh={commandDiscovery.refresh}
-            onSubmitResetOrigin={commandDiscovery.submitResetOrigin}
+          <Route
+            path="/commands"
+            element={
+              <CommandsPanel
+                discovery={commandDiscovery.discovery}
+                submission={commandDiscovery.submission}
+                onRefresh={commandDiscovery.refresh}
+                onSubmitResetOrigin={commandDiscovery.submitResetOrigin}
+              />
+            }
           />
-        ) : null}
-
-        {activeTab === "events" ? (
-          <RecentActivityPanel eventStream={eventStream} />
-        ) : null}
-
-        {activeTab === "settings" ? (
-          <ConnectionSettings onRefresh={refreshManagementData} />
-        ) : null}
+          <Route
+            path="/events"
+            element={<RecentActivityPanel eventStream={eventStream} />}
+          />
+          <Route
+            path="/settings"
+            element={<ConnectionSettings onRefresh={refreshManagementData} />}
+          />
+          <Route path="*" element={<Navigate replace to="/overview" />} />
+        </Routes>
       </div>
     </ManagementShell>
+  )
+}
+
+function ServiceDetailsRoute({
+  onServiceNotFound,
+  services,
+}: {
+  onServiceNotFound: () => void
+  services: ServiceStatus[]
+}) {
+  const { serviceName: routeServiceName } = useParams()
+  const selectedDefinition = useAtomValue(selectedServiceDefinitionAtom)
+  const setSelectedServiceName = useSetAtom(selectedServiceNameAtom)
+  const navigate = useNavigate()
+  const serviceName = routeServiceName ? decodeRouteParam(routeServiceName) : ""
+  const routeService =
+    services.find((service) => service.service_name === serviceName) ?? null
+
+  useEffect(() => {
+    if (serviceName.length === 0) {
+      return
+    }
+
+    setSelectedServiceName(serviceName)
+  }, [serviceName, setSelectedServiceName])
+
+  const handleSelectService = useCallback(
+    (nextServiceName: string) => {
+      setSelectedServiceName(nextServiceName)
+      navigate(`/services/${encodeURIComponent(nextServiceName)}`)
+    },
+    [navigate, setSelectedServiceName],
+  )
+
+  return (
+    <ServiceInspector
+      definition={selectedDefinition}
+      onServiceNotFound={onServiceNotFound}
+      onSelectService={handleSelectService}
+      routeServiceName={serviceName}
+      service={routeService}
+      services={services}
+    />
   )
 }
 
@@ -2057,11 +2136,17 @@ function RiskPill({ riskLevel }: { riskLevel: ServiceRiskLevel }) {
 function ServiceInspector({
   definition,
   onServiceNotFound,
+  onSelectService,
+  routeServiceName,
   service,
+  services,
 }: {
   definition: ServiceDefinition | null
   onServiceNotFound: () => void
+  onSelectService: (serviceName: string) => void
+  routeServiceName: string
   service: ServiceStatus | null
+  services: ServiceStatus[]
 }) {
   const [logOptions, setLogOptions] = useState<ServiceLogOptions>({
     tail: 200,
@@ -2070,168 +2155,267 @@ function ServiceInspector({
     timestamps: true,
   })
   const [activeDetailTab, setActiveDetailTab] = useState<DetailTab>("status")
+  const diagnosticsServiceName = routeServiceName || service?.service_name || null
   const diagnostics = useSelectedServiceDiagnostics(
-    service?.service_name ?? null,
+    diagnosticsServiceName,
     logOptions,
     onServiceNotFound,
   )
   const detailService = diagnostics.detail.data ?? service
 
   return (
-    <aside className="flex h-full min-h-0 flex-col overflow-hidden rounded-lg border border-border bg-card shadow-sm">
-      <section className="shrink-0 border-b border-border p-4">
-        {detailService ? (
-          <>
-            <div className="flex items-start justify-between gap-4">
-              <div className="min-w-0">
-                <p className="text-sm font-medium text-muted-foreground">
-                  当前服务
-                </p>
-                <h2 className="mt-1 truncate text-2xl font-semibold tracking-normal text-card-foreground">
-                  {detailService.display_name}
-                </h2>
-                <p className="mt-1 truncate text-xs text-muted-foreground">
-                  {detailService.service_name}
-                </p>
+    <div className="grid h-full min-h-0 gap-4 xl:grid-cols-[minmax(0,1fr)_240px]">
+      <aside className="flex h-full min-h-0 flex-col overflow-hidden rounded-lg border border-border bg-card shadow-sm">
+        <section className="shrink-0 border-b border-border p-4">
+          {detailService ? (
+            <>
+              <div className="flex items-start justify-between gap-4">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-muted-foreground">
+                    当前服务
+                  </p>
+                  <h2 className="mt-1 truncate text-2xl font-semibold tracking-normal text-card-foreground">
+                    {detailService.display_name}
+                  </h2>
+                  <p className="mt-1 truncate text-xs text-muted-foreground">
+                    {detailService.service_name}
+                  </p>
+                </div>
+                <StatusPill level={detailService.overall.level}>
+                  {formatOverallLevel(detailService.overall.level)}
+                </StatusPill>
               </div>
-              <StatusPill level={detailService.overall.level}>
-                {formatOverallLevel(detailService.overall.level)}
-              </StatusPill>
+
+              <dl className="mt-4 grid grid-cols-4 gap-3 text-sm">
+                <DetailItem label="逻辑名称" value={detailService.service_name} />
+                <DetailItem label="Profile" value={detailService.compose_profile} />
+                <DetailItem label="类别" value={detailService.category} />
+                <DetailItem label="风险" value={formatRiskLevel(detailService.risk_level)} />
+              </dl>
+
+              <div className="mt-4 flex flex-wrap items-center gap-3">
+                <button
+                  type="button"
+                  className="inline-flex h-9 items-center gap-2 rounded-md border border-border bg-card px-3 text-sm font-semibold text-card-foreground hover:bg-muted disabled:cursor-not-allowed disabled:opacity-70"
+                  onClick={diagnostics.refreshDetail}
+                  disabled={
+                    diagnostics.detail.loading || diagnostics.detail.refreshing
+                  }
+                >
+                  <RefreshCw
+                    aria-hidden="true"
+                    className={cn(
+                      "size-4",
+                      (diagnostics.detail.loading ||
+                        diagnostics.detail.refreshing) &&
+                        "animate-spin",
+                    )}
+                  />
+                  刷新详情
+                </button>
+                <span className="text-xs text-muted-foreground">
+                  {diagnostics.detail.loadedAt
+                    ? `详情已加载 ${formatTimestamp(
+                        diagnostics.detail.loadedAt,
+                      )}`
+                    : "详情会从当前选中的逻辑服务加载"}
+                </span>
+              </div>
+
+              {diagnostics.detail.error ? (
+                <PanelError error={diagnostics.detail.error} />
+              ) : null}
+            </>
+          ) : (
+            <div>
+              <p className="text-sm font-medium text-muted-foreground">
+                当前服务
+              </p>
+              <h2 className="mt-1 text-2xl font-semibold tracking-normal text-card-foreground">
+                等待快照
+              </h2>
+              <p className="mt-3 text-sm text-muted-foreground">
+                {routeServiceName
+                  ? `正在等待 ${routeServiceName} 的状态快照。`
+                  : "状态快照填充后，服务详情面板会使用后端 service_name 值。"}
+              </p>
             </div>
+          )}
+        </section>
 
-            <dl className="mt-4 grid grid-cols-4 gap-3 text-sm">
-              <DetailItem label="逻辑名称" value={detailService.service_name} />
-              <DetailItem label="Profile" value={detailService.compose_profile} />
-              <DetailItem label="类别" value={detailService.category} />
-              <DetailItem label="风险" value={formatRiskLevel(detailService.risk_level)} />
-            </dl>
+        <nav
+          aria-label="服务详情"
+          className="flex shrink-0 flex-wrap gap-2 border-b border-border p-3"
+          role="tablist"
+        >
+          {detailTabs.map((tab) => {
+            const active = tab.id === activeDetailTab
 
-            <div className="mt-4 flex flex-wrap items-center gap-3">
+            return (
               <button
+                key={tab.id}
                 type="button"
-                className="inline-flex h-9 items-center gap-2 rounded-md border border-border bg-card px-3 text-sm font-semibold text-card-foreground hover:bg-muted disabled:cursor-not-allowed disabled:opacity-70"
-                onClick={diagnostics.refreshDetail}
-                disabled={
-                  diagnostics.detail.loading || diagnostics.detail.refreshing
-                }
+                className={cn(
+                  "inline-flex h-9 items-center gap-2 rounded-md border px-3 text-sm font-medium",
+                  active
+                    ? "border-primary bg-primary text-primary-foreground"
+                    : "border-border bg-card text-muted-foreground hover:bg-muted hover:text-card-foreground",
+                )}
+                aria-selected={active}
+                role="tab"
+                onClick={() => setActiveDetailTab(tab.id)}
               >
-                <RefreshCw
-                  aria-hidden="true"
-                  className={cn(
-                    "size-4",
-                    (diagnostics.detail.loading ||
-                      diagnostics.detail.refreshing) &&
-                      "animate-spin",
-                  )}
-                />
-                刷新详情
+                <tab.icon aria-hidden="true" className="size-4" />
+                {tab.label}
               </button>
-              <span className="text-xs text-muted-foreground">
-                {diagnostics.detail.loadedAt
-                  ? `详情已加载 ${formatTimestamp(
-                      diagnostics.detail.loadedAt,
-                    )}`
-                  : "详情会从当前选中的逻辑服务加载"}
-              </span>
-            </div>
+            )
+          })}
+        </nav>
 
-            {diagnostics.detail.error ? (
-              <PanelError error={diagnostics.detail.error} />
-            ) : null}
-          </>
-        ) : (
-          <div>
-            <p className="text-sm font-medium text-muted-foreground">
-              当前服务
-            </p>
-            <h2 className="mt-1 text-2xl font-semibold tracking-normal text-card-foreground">
-              等待快照
-            </h2>
-            <p className="mt-3 text-sm text-muted-foreground">
-              状态快照填充后，服务详情面板会使用后端 <code>service_name</code> 值。
-            </p>
-          </div>
-        )}
-      </section>
+        <div className="min-h-0 flex-1 overflow-y-auto p-4">
+          {activeDetailTab === "status" ? (
+            <StatusLayersPanel service={detailService} />
+          ) : null}
 
-      <nav
-        aria-label="服务详情"
-        className="flex shrink-0 flex-wrap gap-2 border-b border-border p-3"
-        role="tablist"
-      >
-        {detailTabs.map((tab) => {
-          const active = tab.id === activeDetailTab
+          {activeDetailTab === "docker" ? (
+            <DockerDetailPanel service={detailService} />
+          ) : null}
 
-          return (
-            <button
-              key={tab.id}
-              type="button"
-              className={cn(
-                "inline-flex h-9 items-center gap-2 rounded-md border px-3 text-sm font-medium",
-                active
-                  ? "border-primary bg-primary text-primary-foreground"
-                  : "border-border bg-card text-muted-foreground hover:bg-muted hover:text-card-foreground",
-              )}
-              aria-selected={active}
-              role="tab"
-              onClick={() => setActiveDetailTab(tab.id)}
-            >
-              <tab.icon aria-hidden="true" className="size-4" />
-              {tab.label}
-            </button>
-          )
-        })}
-      </nav>
+          {activeDetailTab === "ros" ? (
+            <RosDetailPanel definition={definition} service={detailService} />
+          ) : null}
 
-      <div className="min-h-0 flex-1 overflow-y-auto p-4">
-        {activeDetailTab === "status" ? (
-          <StatusLayersPanel service={detailService} />
-        ) : null}
+          {activeDetailTab === "logs" ? (
+            <LogsPanel
+              logs={diagnostics.logs.data}
+              options={logOptions}
+              error={diagnostics.logs.error}
+              loading={diagnostics.logs.loading}
+              refreshing={diagnostics.logs.refreshing}
+              loadedAt={diagnostics.logs.loadedAt}
+              service={detailService}
+              onRefresh={diagnostics.refreshLogs}
+              onUpdateOptions={setLogOptions}
+            />
+          ) : null}
 
-        {activeDetailTab === "docker" ? (
-          <DockerDetailPanel service={detailService} />
-        ) : null}
+          {activeDetailTab === "stats" ? (
+            <StatsPanel
+              error={diagnostics.stats.error}
+              loadedAt={diagnostics.stats.loadedAt}
+              loading={diagnostics.stats.loading}
+              refreshing={diagnostics.stats.refreshing}
+              stats={diagnostics.stats.data}
+              service={detailService}
+              onRefresh={diagnostics.refreshStats}
+            />
+          ) : null}
 
-        {activeDetailTab === "ros" ? (
-          <RosDetailPanel definition={definition} service={detailService} />
-        ) : null}
+          {activeDetailTab === "restart" ? (
+            <HardRestartPanel
+              error={diagnostics.restart.error}
+              response={diagnostics.restart.response}
+              service={detailService}
+              submitting={diagnostics.restart.submitting}
+              onRestart={diagnostics.restartHard}
+            />
+          ) : null}
+        </div>
+      </aside>
 
-        {activeDetailTab === "logs" ? (
-          <LogsPanel
-            logs={diagnostics.logs.data}
-            options={logOptions}
-            error={diagnostics.logs.error}
-            loading={diagnostics.logs.loading}
-            refreshing={diagnostics.logs.refreshing}
-            loadedAt={diagnostics.logs.loadedAt}
-            service={detailService}
-            onRefresh={diagnostics.refreshLogs}
-            onUpdateOptions={setLogOptions}
-          />
-        ) : null}
+      <ServiceContainerSwitcher
+        currentServiceName={detailService?.service_name ?? routeServiceName}
+        services={services}
+        onSelectService={onSelectService}
+      />
+    </div>
+  )
+}
 
-        {activeDetailTab === "stats" ? (
-          <StatsPanel
-            error={diagnostics.stats.error}
-            loadedAt={diagnostics.stats.loadedAt}
-            loading={diagnostics.stats.loading}
-            refreshing={diagnostics.stats.refreshing}
-            stats={diagnostics.stats.data}
-            service={detailService}
-            onRefresh={diagnostics.refreshStats}
-          />
-        ) : null}
-
-        {activeDetailTab === "restart" ? (
-          <HardRestartPanel
-            error={diagnostics.restart.error}
-            response={diagnostics.restart.response}
-            service={detailService}
-            submitting={diagnostics.restart.submitting}
-            onRestart={diagnostics.restartHard}
-          />
-        ) : null}
+function ServiceContainerSwitcher({
+  currentServiceName,
+  onSelectService,
+  services,
+}: {
+  currentServiceName: string
+  onSelectService: (serviceName: string) => void
+  services: ServiceStatus[]
+}) {
+  return (
+    <aside className="flex min-h-0 flex-col overflow-hidden rounded-lg border border-border bg-card shadow-sm">
+      <div className="shrink-0 border-b border-border p-3">
+        <h3 className="flex items-center gap-2 text-sm font-semibold text-card-foreground">
+          <Container aria-hidden="true" className="size-4" />
+          容器
+        </h3>
+        <p className="mt-1 text-xs text-muted-foreground">
+          切换当前详情页查看的注册容器状态。
+        </p>
       </div>
+
+      {services.length > 0 ? (
+        <div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-3">
+          {services.map((service) => {
+            const active = service.service_name === currentServiceName
+            const OverallIcon = overallIcons[service.overall.level]
+
+            return (
+              <button
+                key={service.service_name}
+                type="button"
+                aria-pressed={active}
+                className={cn(
+                  "flex w-full min-w-0 flex-col rounded-md border p-3 text-left text-sm transition",
+                  active
+                    ? "border-primary bg-primary text-primary-foreground"
+                    : "border-border bg-card text-card-foreground hover:bg-muted",
+                )}
+                onClick={() => onSelectService(service.service_name)}
+              >
+                <span className="flex min-w-0 items-center gap-2">
+                  <Container
+                    aria-hidden="true"
+                    className={cn(
+                      "size-4 shrink-0",
+                      active
+                        ? "text-primary-foreground"
+                        : dockerStyles[service.docker.state],
+                    )}
+                  />
+                  <span className="truncate font-semibold">
+                    {service.container_name}
+                  </span>
+                </span>
+                <span
+                  className={cn(
+                    "mt-1 truncate text-xs",
+                    active ? "text-primary-foreground/80" : "text-muted-foreground",
+                  )}
+                >
+                  {service.display_name}
+                </span>
+                <span
+                  className={cn(
+                    "mt-2 inline-flex w-fit items-center gap-1.5 rounded-md border px-2 py-0.5 text-xs font-semibold",
+                    active
+                      ? "border-primary-foreground/40 text-primary-foreground"
+                      : levelStyles[service.overall.level],
+                  )}
+                >
+                  <OverallIcon aria-hidden="true" className="size-3" />
+                  {formatOverallLevel(service.overall.level)}
+                </span>
+              </button>
+            )
+          })}
+        </div>
+      ) : (
+        <div className="grid min-h-0 flex-1 place-items-center p-4 text-center">
+          <p className="text-sm text-muted-foreground">
+            等待服务快照后显示可切换容器。
+          </p>
+        </div>
+      )}
     </aside>
   )
 }
