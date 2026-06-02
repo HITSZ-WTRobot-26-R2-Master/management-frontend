@@ -539,7 +539,6 @@ describe("command confirmation helpers", () => {
         command: resetOriginCommand,
         error: null,
         operatorConfirmed: false,
-        reason: "field reset",
         submitting: false,
       }),
     ).toEqual({
@@ -548,17 +547,30 @@ describe("command confirmation helpers", () => {
     })
   })
 
-  test("allows submission after confirmation and operator reason", () => {
+  test("allows submission after confirmation without operator reason", () => {
     expect(
       getCommandConfirmationState({
         command: resetOriginCommand,
         error: null,
         operatorConfirmed: true,
-        reason: "field reset",
         submitting: false,
       }),
     ).toEqual({
       canSubmit: true,
+      requiresConfirm: true,
+    })
+  })
+
+  test("keeps submission disabled while a command is submitting", () => {
+    expect(
+      getCommandConfirmationState({
+        command: resetOriginCommand,
+        error: null,
+        operatorConfirmed: true,
+        submitting: true,
+      }),
+    ).toEqual({
+      canSubmit: false,
       requiresConfirm: true,
     })
   })
@@ -580,7 +592,6 @@ describe("command confirmation helpers", () => {
           message: "confirm=true required",
         },
         operatorConfirmed: false,
-        reason: "field reset",
         submitting: false,
       }),
     ).toEqual({

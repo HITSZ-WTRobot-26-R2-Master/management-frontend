@@ -79,10 +79,16 @@ export function ManagementShell({
               </button>
             </div>
           </div>
-          <div className="mx-auto max-w-[1600px] px-5 pb-3">
+        </header>
+
+        <div className="mx-auto flex min-h-0 w-full max-w-[1600px] flex-1 flex-col gap-3 px-5 py-4 xl:flex-row">
+          <main className="min-h-0 min-w-0 flex-1 overflow-hidden">
+            {children}
+          </main>
+          <aside className="order-first shrink-0 overflow-x-auto xl:order-none xl:w-40 xl:overflow-visible">
             <nav
               aria-label="管理导航"
-              className="flex flex-wrap gap-2"
+              className="flex w-max gap-2 xl:w-full xl:flex-col"
               role="tablist"
             >
               {navItems.map((item) => {
@@ -101,7 +107,7 @@ export function ManagementShell({
                       const active = isActive && !disabled
 
                       return cn(
-                        "inline-flex h-9 items-center gap-2 rounded-md border px-3 text-sm font-medium",
+                        "inline-flex h-9 items-center gap-2 rounded-md border px-3 text-sm font-medium xl:w-full xl:justify-start",
                         active
                           ? "border-primary bg-primary text-primary-foreground"
                           : "border-border bg-card text-muted-foreground hover:bg-muted hover:text-card-foreground",
@@ -116,12 +122,8 @@ export function ManagementShell({
                 )
               })}
             </nav>
-          </div>
-        </header>
-
-        <main className="mx-auto min-h-0 w-full max-w-[1600px] flex-1 overflow-hidden px-5 py-4">
-          {children}
-        </main>
+          </aside>
+        </div>
       </div>
     </div>
   )

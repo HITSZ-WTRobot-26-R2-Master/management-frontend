@@ -29,11 +29,15 @@ import {
 } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
 import { useAtom, useAtomValue, useSetAtom } from "jotai"
+import { createPortal } from "react-dom"
 import {
+  type CSSProperties,
   type FormEvent,
   type ReactNode,
+  type RefObject,
   useCallback,
   useEffect,
+  useId,
   useMemo,
   useRef,
   useState,
@@ -670,19 +674,21 @@ function OverviewTab({
   onOpenEvents: () => void
   onOpenServices: () => void
 }) {
+  const abnormalServices = services.filter(
+    (service) => service.overall.level !== "ok",
+  )
+
   return (
     <section className="flex h-full min-h-0 flex-col gap-4 overflow-hidden">
       <HeaderSummary
+        abnormalServices={abnormalServices}
         eventStream={eventStream}
         lastLoadedAt={lastLoadedAt}
         services={services}
+        onOpenServices={onOpenServices}
       />
       <ChassisStateCard stream={chassisStateStream} />
-      <div className="grid min-h-0 flex-1 gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(360px,0.8fr)]">
-        <OverviewServiceSummary
-          services={services}
-          onOpenServices={onOpenServices}
-        />
+      <div className="grid min-h-0 flex-1">
         <OverviewEventsSummary
           eventStream={eventStream}
           onOpenEvents={onOpenEvents}
@@ -692,81 +698,235 @@ function OverviewTab({
   )
 }
 
-function OverviewServiceSummary({
-  services,
-  onOpenServices,
-}: {
-  services: ServiceStatus[]
-  onOpenServices: () => void
-}) {
-  const abnormalServices = services.filter(
-    (service) => service.overall.level !== "ok",
-  )
-  const previewServices = abnormalServices.slice(0, 8)
+interface AbnormalServicesPopoverPosition {
+  left: number
+  maxHeight: number
+  top: number
+  width: number
+}
 
-  return (
-    <section className="flex min-h-0 flex-col rounded-lg border border-border bg-card shadow-sm">
-      <div className="flex items-center justify-between gap-3 border-b border-border p-4">
+function AbnormalServicesPopover({
+  abnormalServices,
+  onClose,
+  onOpenServices,
+  open,
+  popoverId,
+  servicesCount,
+  triggerRef,
+}: {
+  abnormalServices: ServiceStatus[]
+  onClose: () => void
+  onOpenServices: () => void
+  open: boolean
+  popoverId: string
+  servicesCount: number
+  triggerRef: RefObject<HTMLButtonElement | null>
+}) {
+  const [position, setPosition] =
+    useState<AbnormalServicesPopoverPosition | null>(null)
+  const popoverRef = useRef<HTMLDivElement | null>(null)
+
+  const updatePosition = useCallback(() => {
+    const trigger = triggerRef.current
+
+    if (!trigger) {
+      return
+    }
+
+    const gap = 8
+    const margin = 16
+    const rect = trigger.getBoundingClientRect()
+    const viewportWidth = window.innerWidth
+    const viewportHeight = window.innerHeight
+    const width = Math.max(240, Math.min(384, viewportWidth - margin * 2))
+    const maxLeft = Math.max(margin, viewportWidth - width - margin)
+    const left = Math.min(
+      Math.max(rect.left + rect.width / 2 - width / 2, margin),
+      maxLeft,
+    )
+    const availableBelow = viewportHeight - rect.bottom - gap - margin
+    const availableAbove = rect.top - gap - margin
+    const placeAbove = availableBelow < 240 && availableAbove > availableBelow
+    const availableHeight = Math.max(
+      80,
+      placeAbove ? availableAbove : availableBelow,
+    )
+    const maxHeight = Math.min(480, availableHeight)
+    const top = placeAbove
+      ? Math.max(margin, rect.top - gap - maxHeight)
+      : Math.max(
+          margin,
+          Math.min(rect.bottom + gap, viewportHeight - maxHeight - margin),
+        )
+
+    setPosition({ left, maxHeight, top, width })
+  }, [triggerRef])
+
+  useEffect(() => {
+    if (!open) {
+      setPosition(null)
+      return
+    }
+
+    updatePosition()
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        onClose()
+      }
+    }
+
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target
+
+      if (!(target instanceof Node)) {
+        return
+      }
+
+      if (
+        popoverRef.current?.contains(target) ||
+        triggerRef.current?.contains(target)
+      ) {
+        return
+      }
+
+      onClose()
+    }
+
+    document.addEventListener("keydown", handleKeyDown)
+    document.addEventListener("pointerdown", handlePointerDown)
+    document.addEventListener("scroll", updatePosition, true)
+    window.addEventListener("resize", updatePosition)
+
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown)
+      document.removeEventListener("pointerdown", handlePointerDown)
+      document.removeEventListener("scroll", updatePosition, true)
+      window.removeEventListener("resize", updatePosition)
+    }
+  }, [onClose, open, triggerRef, updatePosition])
+
+  if (!open || position === null || typeof document === "undefined") {
+    return null
+  }
+
+  const style: CSSProperties = {
+    left: position.left,
+    maxHeight: position.maxHeight,
+    top: position.top,
+    width: position.width,
+  }
+
+  return createPortal(
+    <div
+      aria-labelledby={`${popoverId}-title`}
+      aria-modal="false"
+      className="fixed z-50 flex flex-col rounded-lg border border-border bg-popover text-popover-foreground shadow-2xl ring-1 ring-black/5"
+      id={popoverId}
+      ref={popoverRef}
+      role="dialog"
+      style={style}
+    >
+      <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border p-4">
         <div className="min-w-0">
-          <h2 className="text-base font-semibold text-card-foreground">
+          <h2
+            className="text-base font-semibold text-card-foreground"
+            id={`${popoverId}-title`}
+          >
             异常服务
           </h2>
           <p className="mt-1 truncate text-sm text-muted-foreground">
             当前快照中非正常状态的服务摘要
           </p>
         </div>
-        <button
-          type="button"
-          className="inline-flex h-9 shrink-0 items-center gap-2 rounded-md border border-border bg-card px-3 text-sm font-semibold text-card-foreground hover:bg-muted"
-          onClick={onOpenServices}
-        >
-          <Boxes aria-hidden="true" className="size-4" />
-          服务
-        </button>
-      </div>
-
-      {services.length === 0 ? (
-        <CompactEmptyState
-          icon={Server}
-          title="等待服务快照"
-          text="连接后会在这里显示异常服务摘要。"
-        />
-      ) : previewServices.length === 0 ? (
-        <CompactEmptyState
-          icon={CheckCircle2}
-          title="未发现异常服务"
-          text="当前已加载服务均处于正常状态。"
-        />
-      ) : (
-        <div className="min-h-0 flex-1 overflow-y-auto p-4">
-          <div className="grid gap-3 2xl:grid-cols-2">
-            {previewServices.map((service) => (
-              <article
-                key={service.service_name}
-                className="min-w-0 rounded-md border border-border bg-muted/50 p-3"
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <h3 className="truncate text-sm font-semibold text-card-foreground">
-                      {service.display_name}
-                    </h3>
-                    <p className="mt-1 truncate text-xs text-muted-foreground">
-                      {service.service_name}
-                    </p>
-                  </div>
-                  <StatusPill level={service.overall.level}>
-                    {formatOverallLevel(service.overall.level)}
-                  </StatusPill>
-                </div>
-                <p className="mt-3 line-clamp-2 text-sm text-muted-foreground">
-                  {formatDisplaySummary(service.overall.reason)}
-                </p>
-              </article>
-            ))}
-          </div>
+        <div className="flex shrink-0 items-center gap-2">
+          <button
+            type="button"
+            className="inline-flex h-9 items-center gap-2 rounded-md border border-border bg-card px-3 text-sm font-semibold text-card-foreground hover:bg-muted"
+            onClick={() => {
+              onOpenServices()
+              onClose()
+            }}
+          >
+            <Boxes aria-hidden="true" className="size-4" />
+            服务
+          </button>
+          <button
+            type="button"
+            aria-label="关闭异常服务浮层"
+            className="inline-flex size-9 items-center justify-center rounded-md border border-border bg-card text-lg leading-none text-card-foreground hover:bg-muted"
+            onClick={onClose}
+          >
+            ×
+          </button>
         </div>
-      )}
-    </section>
+      </div>
+      <AbnormalServicesPanelContent
+        abnormalServices={abnormalServices}
+        servicesCount={servicesCount}
+      />
+    </div>,
+    document.body,
+  )
+}
+
+function AbnormalServicesPanelContent({
+  abnormalServices,
+  servicesCount,
+}: {
+  abnormalServices: ServiceStatus[]
+  servicesCount: number
+}) {
+  const previewServices = abnormalServices.slice(0, 8)
+
+  if (servicesCount === 0) {
+    return (
+      <CompactEmptyState
+        icon={Server}
+        title="等待服务快照"
+        text="连接后会在这里显示异常服务摘要。"
+      />
+    )
+  }
+
+  if (previewServices.length === 0) {
+    return (
+      <CompactEmptyState
+        icon={CheckCircle2}
+        title="未发现异常服务"
+        text="当前已加载服务均处于正常状态。"
+      />
+    )
+  }
+
+  return (
+    <div className="min-h-0 flex-1 overflow-y-auto p-4">
+      <div className="grid gap-3">
+        {previewServices.map((service) => (
+          <article
+            key={service.service_name}
+            className="min-w-0 rounded-md border border-border bg-muted/50 p-3"
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <h3 className="truncate text-sm font-semibold text-card-foreground">
+                  {service.display_name}
+                </h3>
+                <p className="mt-1 truncate text-xs text-muted-foreground">
+                  {service.service_name}
+                </p>
+              </div>
+              <StatusPill level={service.overall.level}>
+                {formatOverallLevel(service.overall.level)}
+              </StatusPill>
+            </div>
+            <p className="mt-3 line-clamp-2 text-sm text-muted-foreground">
+              {formatDisplaySummary(service.overall.reason)}
+            </p>
+          </article>
+        ))}
+      </div>
+    </div>
   )
 }
 
@@ -845,18 +1005,30 @@ function CompactEmptyState({
 }
 
 function HeaderSummary({
+  abnormalServices,
   eventStream,
   lastLoadedAt,
   services,
+  onOpenServices,
 }: {
+  abnormalServices: ServiceStatus[]
   eventStream: ReturnType<typeof useEventStream>
   lastLoadedAt: string | null
   services: ServiceStatus[]
+  onOpenServices: () => void
 }) {
   const definitions = useAtomValue(serviceDefinitionsAtom)
   const commands = useAtomValue(commandsAtom)
   const events = useAtomValue(recentEventsAtom)
   const connectionState = useAtomValue(connectionStateAtom)
+  const [abnormalOpen, setAbnormalOpen] = useState(false)
+  const abnormalTriggerRef = useRef<HTMLButtonElement | null>(null)
+  const abnormalPopoverId = useId()
+  const closeAbnormalPopover = useCallback(() => setAbnormalOpen(false), [])
+  const toggleAbnormalPopover = useCallback(
+    () => setAbnormalOpen((open) => !open),
+    [],
+  )
   const counts = services.reduce(
     (summary, service) => {
       summary[service.overall.level] += 1
@@ -869,73 +1041,116 @@ function HeaderSummary({
   )
 
   return (
-    <div className="grid shrink-0 gap-3 md:grid-cols-2 xl:grid-cols-5">
-      <MetricTile
-        icon={Server}
-        label="托管服务"
-        value={services.length.toString()}
-        detail={`已加载 ${definitions.length} 个注册定义`}
+    <>
+      <div className="grid shrink-0 gap-3 md:grid-cols-2 xl:grid-cols-5">
+        <MetricTile
+          icon={Server}
+          label="托管服务"
+          value={services.length.toString()}
+          detail={`已加载 ${definitions.length} 个注册定义`}
+        />
+        <MetricTile
+          ariaControls={abnormalPopoverId}
+          ariaExpanded={abnormalOpen}
+          ariaHaspopup="dialog"
+          ariaLabel={`查看异常服务，正常 ${counts.ok} 个，警告 ${counts.warning} 个，错误 ${counts.error} 个，未知 ${counts.unknown} 个`}
+          buttonRef={abnormalTriggerRef}
+          icon={CheckCircle2}
+          isActive={abnormalOpen}
+          label="正常 / 警告"
+          value={`${counts.ok} / ${counts.warning}`}
+          detail={`${counts.error} 个错误，${counts.unknown} 个未知`}
+          onClick={toggleAbnormalPopover}
+        />
+        <MetricTile
+          icon={TerminalSquare}
+          label="命令"
+          value={commands.length.toString()}
+          detail="可见的类型化命令定义"
+        />
+        <MetricTile
+          icon={eventStream.error ? AlertTriangle : Activity}
+          label="事件流"
+          value={connectionLabels[connectionState.status]}
+          detail={
+            eventStream.lastEventAt
+              ? `实时 ${formatTimestamp(eventStream.lastEventAt)}`
+              : eventStream.fallbackRefreshAt
+                ? `REST 回退 ${formatTimestamp(
+                    eventStream.fallbackRefreshAt,
+                  )}`
+                : eventStream.error
+                  ? formatApiError(eventStream.error)
+                  : eventStream.loadedRecentAt
+                      ? `最近事件已加载 ${formatTimestamp(
+                          eventStream.loadedRecentAt,
+                        )}`
+                      : lastLoadedAt
+                        ? `快照 ${formatTimestamp(lastLoadedAt)}`
+                        : "等待首次加载"
+          }
+        />
+        <MetricTile
+          icon={ListRestart}
+          label="最近事件"
+          value={events.length.toString()}
+          detail={
+            eventStream.loadedRecentAt
+              ? `已加载 ${formatTimestamp(eventStream.loadedRecentAt)}`
+              : lastLoadedAt
+                  ? `已加载 ${formatTimestamp(lastLoadedAt)}`
+                  : "等待首次加载"
+          }
+        />
+      </div>
+      <AbnormalServicesPopover
+        abnormalServices={abnormalServices}
+        onClose={closeAbnormalPopover}
+        onOpenServices={onOpenServices}
+        open={abnormalOpen}
+        popoverId={abnormalPopoverId}
+        servicesCount={services.length}
+        triggerRef={abnormalTriggerRef}
       />
-      <MetricTile
-        icon={CheckCircle2}
-        label="正常 / 警告"
-        value={`${counts.ok} / ${counts.warning}`}
-        detail={`${counts.error} 个错误，${counts.unknown} 个未知`}
-      />
-      <MetricTile
-        icon={TerminalSquare}
-        label="命令"
-        value={commands.length.toString()}
-        detail="可见的类型化命令定义"
-      />
-      <MetricTile
-        icon={eventStream.error ? AlertTriangle : Activity}
-        label="事件流"
-        value={connectionLabels[connectionState.status]}
-        detail={
-          eventStream.lastEventAt
-            ? `实时 ${formatTimestamp(eventStream.lastEventAt)}`
-            : eventStream.fallbackRefreshAt
-              ? `REST 回退 ${formatTimestamp(
-                  eventStream.fallbackRefreshAt,
-                )}`
-              : eventStream.error
-                ? formatApiError(eventStream.error)
-                : eventStream.loadedRecentAt
-                    ? `最近事件已加载 ${formatTimestamp(
-                        eventStream.loadedRecentAt,
-                      )}`
-                    : lastLoadedAt
-                      ? `快照 ${formatTimestamp(lastLoadedAt)}`
-                      : "等待首次加载"
-        }
-      />
-      <MetricTile
-        icon={ListRestart}
-        label="最近事件"
-        value={events.length.toString()}
-        detail={
-          eventStream.loadedRecentAt
-            ? `已加载 ${formatTimestamp(eventStream.loadedRecentAt)}`
-            : lastLoadedAt
-                ? `已加载 ${formatTimestamp(lastLoadedAt)}`
-                : "等待首次加载"
-        }
-      />
-    </div>
+    </>
   )
 }
 
 interface MetricTileProps {
-  icon: LucideIcon
-  label: string
-  value: string
+  ariaControls?: string
+  ariaExpanded?: boolean
+  ariaHaspopup?: "dialog"
+  ariaLabel?: string
+  buttonRef?: RefObject<HTMLButtonElement | null>
   detail: string
+  icon: LucideIcon
+  isActive?: boolean
+  label: string
+  onClick?: () => void
+  value: string
 }
 
-function MetricTile({ icon: Icon, label, value, detail }: MetricTileProps) {
-  return (
-    <div className="rounded-lg border border-border bg-card p-3 shadow-sm">
+function MetricTile({
+  ariaControls,
+  ariaExpanded,
+  ariaHaspopup,
+  ariaLabel,
+  buttonRef,
+  detail,
+  icon: Icon,
+  isActive = false,
+  label,
+  onClick,
+  value,
+}: MetricTileProps) {
+  const className = cn(
+    "rounded-lg border border-border bg-card p-3 shadow-sm",
+    onClick &&
+      "w-full text-left transition hover:border-primary/50 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 active:scale-[0.99]",
+    isActive && "border-primary ring-2 ring-primary/20",
+  )
+  const content = (
+    <>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-sm font-medium text-muted-foreground">{label}</p>
@@ -950,8 +1165,27 @@ function MetricTile({ icon: Icon, label, value, detail }: MetricTileProps) {
       <p className="mt-2 line-clamp-2 text-sm text-muted-foreground">
         {detail}
       </p>
-    </div>
+    </>
   )
+
+  if (onClick) {
+    return (
+      <button
+        aria-controls={ariaControls}
+        aria-expanded={ariaExpanded}
+        aria-haspopup={ariaHaspopup}
+        aria-label={ariaLabel}
+        className={className}
+        onClick={onClick}
+        ref={buttonRef}
+        type="button"
+      >
+        {content}
+      </button>
+    )
+  }
+
+  return <div className={className}>{content}</div>
 }
 
 interface ServiceOverviewProps {
@@ -1780,7 +2014,6 @@ function ResetOriginForm({
     command,
     error: submission.error,
     operatorConfirmed,
-    reason: payload.reason,
     submitting: submission.submitting,
   })
 
@@ -1826,7 +2059,7 @@ function ResetOriginForm({
 
       <label className="grid gap-2">
         <span className="text-xs font-semibold uppercase text-muted-foreground">
-          原因
+          可选原因
         </span>
         <textarea
           className="min-h-20 resize-y rounded-md border border-input bg-card px-3 py-2 text-sm text-card-foreground outline-none transition focus:border-ring focus:ring-2 focus:ring-ring/20"

@@ -8,7 +8,6 @@ interface CommandConfirmationInput {
   command: CommandDefinition
   error: ApiError | null
   operatorConfirmed: boolean
-  reason: string
   submitting: boolean
 }
 
@@ -21,7 +20,6 @@ export function getCommandConfirmationState({
   command,
   error,
   operatorConfirmed,
-  reason,
   submitting,
 }: CommandConfirmationInput): CommandConfirmationState {
   const requiresConfirm =
@@ -30,10 +28,7 @@ export function getCommandConfirmationState({
     error?.code === "command_confirm_required"
 
   return {
-    canSubmit:
-      !submitting &&
-      reason.trim().length > 0 &&
-      (!requiresConfirm || operatorConfirmed),
+    canSubmit: !submitting && (!requiresConfirm || operatorConfirmed),
     requiresConfirm,
   }
 }
