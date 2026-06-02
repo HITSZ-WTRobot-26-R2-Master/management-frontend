@@ -47,6 +47,8 @@ import {
   useParams,
 } from "react-router-dom"
 import { ManagementShell } from "@/components/management/ManagementShell"
+import { ChassisStateCard } from "@/components/management/ChassisStateCard"
+import { useChassisStateStream } from "@/hooks/useChassisStateStream"
 import {
   type CommandDiscoveryState,
   type CommandSubmissionState,
@@ -273,14 +275,17 @@ function ManagementApp() {
   const snapshot = useServicesSnapshot()
   const commandDiscovery = useCommandDiscovery()
   const eventStream = useEventStream()
+  const chassisStateStream = useChassisStateStream()
   const refreshSnapshot = snapshot.refresh
   const refreshCommands = commandDiscovery.refresh
   const refreshRecent = eventStream.refreshRecent
+  const refreshChassisState = chassisStateStream.refresh
   const refreshManagementData = useCallback(() => {
     refreshSnapshot()
     refreshCommands()
     refreshRecent()
-  }, [refreshCommands, refreshRecent, refreshSnapshot])
+    refreshChassisState()
+  }, [refreshChassisState, refreshCommands, refreshRecent, refreshSnapshot])
   const [filters, setFilters] = useState<ServiceFilterState>({
     status: allFilterValue,
     category: allFilterValue,
@@ -329,6 +334,7 @@ function ManagementApp() {
             element={
               <OverviewTab
                 eventStream={eventStream}
+                chassisStateStream={chassisStateStream}
                 lastLoadedAt={snapshot.lastLoadedAt}
                 services={services}
                 onOpenEvents={() => navigate("/events")}
@@ -650,12 +656,14 @@ function ConnectionBadge({ state }: { state: ConnectionState }) {
 }
 
 function OverviewTab({
+  chassisStateStream,
   eventStream,
   lastLoadedAt,
   services,
   onOpenEvents,
   onOpenServices,
 }: {
+  chassisStateStream: ReturnType<typeof useChassisStateStream>
   eventStream: ReturnType<typeof useEventStream>
   lastLoadedAt: string | null
   services: ServiceStatus[]
@@ -669,6 +677,7 @@ function OverviewTab({
         lastLoadedAt={lastLoadedAt}
         services={services}
       />
+      <ChassisStateCard stream={chassisStateStream} />
       <div className="grid min-h-0 flex-1 gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(360px,0.8fr)]">
         <OverviewServiceSummary
           services={services}

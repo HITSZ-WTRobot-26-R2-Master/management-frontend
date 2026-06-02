@@ -222,6 +222,73 @@ export interface ServiceStats {
   pids_current: number
 }
 
+export interface ChassisPoseState {
+  x: number
+  y: number
+  yaw_deg: number
+  front_height: number
+  rear_height: number
+}
+
+export interface ChassisActionState {
+  raw_table: number
+  step_status: number
+  chassis_mode: number
+  chassis_curve_finished: boolean
+  lift_status: number
+  grip_status: number
+  grip_suction_has_object: boolean
+  infrared_receiver_state: number
+}
+
+export interface ChassisConnectionState {
+  raw_table: number
+  wheel_0: boolean
+  wheel_1: boolean
+  wheel_2: boolean
+  wheel_3: boolean
+  lift_0: boolean
+  lift_1: boolean
+  lift_2: boolean
+  lift_3: boolean
+  grip_arm: boolean
+  grip_turn: boolean
+  gyro_yaw: boolean
+  upper_host_localization: boolean
+  upper_host: boolean
+}
+
+export interface ChassisStateMessage {
+  timestamp_ms: number
+  pose: ChassisPoseState
+  action: ChassisActionState
+  connection: ChassisConnectionState
+}
+
+export interface ChassisStateSnapshot {
+  available: boolean
+  topic: string
+  received_at: string | null
+  message: ChassisStateMessage | null
+}
+
+export interface ChassisStateSnapshotMessage {
+  type: "chassis_state_snapshot"
+  time: string
+  snapshot: ChassisStateSnapshot
+}
+
+export interface ChassisStateErrorMessage {
+  type: "chassis_state_error"
+  time: string
+  code: ApiErrorCode
+  message: string
+}
+
+export type ChassisStateWebSocketMessage =
+  | ChassisStateSnapshotMessage
+  | ChassisStateErrorMessage
+
 export interface RestartRequest {
   mode: "hard"
   reason?: string

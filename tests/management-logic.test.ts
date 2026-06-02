@@ -7,7 +7,10 @@ import { reduceServiceStatusesForEvent } from "../src/lib/event-reducer"
 import {
   buildManagementHttpUrl,
   buildManagementWebSocketUrl,
+  buildChassisStateWebSocketUrl,
   buildServiceLogWebSocketUrl,
+  isChassisStateSnapshot,
+  isChassisStateWebSocketMessage,
   isAbortError,
   isServiceStatus,
   isValidManagementBaseUrl,
@@ -211,6 +214,30 @@ describe("management API URL helpers", () => {
     }
   })
 
+  test("builds chassis state WebSocket URLs with query token auth", () => {
+    const previousLocation = globalThis.location
+
+    Object.defineProperty(globalThis, "location", {
+      configurable: true,
+      value: {
+        origin: "http://127.0.0.1:5173",
+      },
+    })
+
+    try {
+      expect(
+        buildChassisStateWebSocketUrl("/management-api", "change-me"),
+      ).toBe(
+        "ws://127.0.0.1:5173/management-api/ws/chassis/state?token=change-me",
+      )
+    } finally {
+      Object.defineProperty(globalThis, "location", {
+        configurable: true,
+        value: previousLocation,
+      })
+    }
+  })
+
   test("preserves the existing events WebSocket helper behavior", () => {
     expect(
       buildManagementWebSocketUrl("http://127.0.0.1:8080", "change-me"),
@@ -222,6 +249,62 @@ describe("management API URL helpers", () => {
     expect(isValidManagementBaseUrl("/management-api")).toBe(true)
     expect(isValidManagementBaseUrl("ftp://192.168.31.52:8080")).toBe(false)
     expect(isValidManagementBaseUrl("//192.168.31.52:8080")).toBe(false)
+  })
+})
+
+describe("chassis state API contract", () => {
+  test("validates complete chassis state snapshots", () => {
+    expect(isChassisStateSnapshot(chassisStateSnapshot())).toBe(true)
+    expect(
+      isChassisStateSnapshot({
+        available: false,
+        topic: "chassis_state",
+        received_at: null,
+        message: null,
+      }),
+    ).toBe(true)
+  })
+
+  test("rejects malformed chassis state snapshots", () => {
+    const snapshot = chassisStateSnapshot()
+
+    expect(
+      isChassisStateSnapshot({
+        ...snapshot,
+        message: {
+          ...snapshot.message,
+          connection: {
+            ...snapshot.message.connection,
+            upper_host: "yes",
+          },
+        },
+      }),
+    ).toBe(false)
+  })
+
+  test("validates chassis state websocket messages", () => {
+    expect(
+      isChassisStateWebSocketMessage({
+        type: "chassis_state_snapshot",
+        time: "2026-06-02T02:30:00Z",
+        snapshot: chassisStateSnapshot(),
+      }),
+    ).toBe(true)
+    expect(
+      isChassisStateWebSocketMessage({
+        type: "chassis_state_error",
+        time: "2026-06-02T02:30:00Z",
+        code: "request_failed",
+        message: "agent unavailable",
+      }),
+    ).toBe(true)
+    expect(
+      isChassisStateWebSocketMessage({
+        type: "chassis_state_snapshot",
+        time: "2026-06-02T02:30:00Z",
+        snapshot: { available: true },
+      }),
+    ).toBe(false)
   })
 })
 
@@ -621,5 +704,49 @@ function makeServiceStatus(
       ...overrides.ros,
     },
     service_name: serviceName,
+  }
+}
+
+function chassisStateSnapshot() {
+  return {
+    available: true,
+    topic: "chassis_state",
+    received_at: "2026-06-02T02:30:00Z",
+    message: {
+      timestamp_ms: 1234,
+      pose: {
+        x: 1.25,
+        y: -2.5,
+        yaw_deg: 90,
+        front_height: 0.12,
+        rear_height: 0.13,
+      },
+      action: {
+        raw_table: 0x1234,
+        step_status: 1,
+        chassis_mode: 2,
+        chassis_curve_finished: true,
+        lift_status: 3,
+        grip_status: 4,
+        grip_suction_has_object: false,
+        infrared_receiver_state: 2,
+      },
+      connection: {
+        raw_table: 0xc3ff,
+        wheel_0: true,
+        wheel_1: true,
+        wheel_2: true,
+        wheel_3: false,
+        lift_0: true,
+        lift_1: false,
+        lift_2: true,
+        lift_3: false,
+        grip_arm: true,
+        grip_turn: false,
+        gyro_yaw: true,
+        upper_host_localization: true,
+        upper_host: false,
+      },
+    },
   }
 }

@@ -1,5 +1,7 @@
 import type {
   ApiError,
+  ChassisStateSnapshot,
+  ChassisStateWebSocketMessage,
   CommandDefinition,
   CommandRequest,
   CommandResponse,
@@ -177,6 +179,12 @@ export class ManagementApiClient {
       isServiceStats,
       { signal },
     )
+  }
+
+  getChassisState(signal?: AbortSignal) {
+    return this.request("/api/chassis/state", isChassisStateSnapshot, {
+      signal,
+    })
   }
 
   restartService(
@@ -358,6 +366,14 @@ export function buildManagementWebSocketUrl(baseUrl: string, token: string) {
   return buildManagementWebSocketEndpointUrl(
     baseUrl,
     "/ws/events",
+    token,
+  ).toString()
+}
+
+export function buildChassisStateWebSocketUrl(baseUrl: string, token: string) {
+  return buildManagementWebSocketEndpointUrl(
+    baseUrl,
+    "/ws/chassis/state",
     token,
   ).toString()
 }
@@ -695,6 +711,91 @@ function isServiceStats(value: unknown): value is ServiceStats {
     isNumber(value.block_read_bytes) &&
     isNumber(value.block_write_bytes) &&
     isNumber(value.pids_current)
+  )
+}
+
+export function isChassisStateSnapshot(
+  value: unknown,
+): value is ChassisStateSnapshot {
+  return (
+    isRecord(value) &&
+    isBoolean(value.available) &&
+    isString(value.topic) &&
+    isNullableString(value.received_at) &&
+    (value.message === null || isChassisStateMessage(value.message))
+  )
+}
+
+function isChassisStateMessage(value: unknown) {
+  return (
+    isRecord(value) &&
+    isNumber(value.timestamp_ms) &&
+    isChassisPoseState(value.pose) &&
+    isChassisActionState(value.action) &&
+    isChassisConnectionState(value.connection)
+  )
+}
+
+function isChassisPoseState(value: unknown) {
+  return (
+    isRecord(value) &&
+    isNumber(value.x) &&
+    isNumber(value.y) &&
+    isNumber(value.yaw_deg) &&
+    isNumber(value.front_height) &&
+    isNumber(value.rear_height)
+  )
+}
+
+function isChassisActionState(value: unknown) {
+  return (
+    isRecord(value) &&
+    isNumber(value.raw_table) &&
+    isNumber(value.step_status) &&
+    isNumber(value.chassis_mode) &&
+    isBoolean(value.chassis_curve_finished) &&
+    isNumber(value.lift_status) &&
+    isNumber(value.grip_status) &&
+    isBoolean(value.grip_suction_has_object) &&
+    isNumber(value.infrared_receiver_state)
+  )
+}
+
+function isChassisConnectionState(value: unknown) {
+  return (
+    isRecord(value) &&
+    isNumber(value.raw_table) &&
+    isBoolean(value.wheel_0) &&
+    isBoolean(value.wheel_1) &&
+    isBoolean(value.wheel_2) &&
+    isBoolean(value.wheel_3) &&
+    isBoolean(value.lift_0) &&
+    isBoolean(value.lift_1) &&
+    isBoolean(value.lift_2) &&
+    isBoolean(value.lift_3) &&
+    isBoolean(value.grip_arm) &&
+    isBoolean(value.grip_turn) &&
+    isBoolean(value.gyro_yaw) &&
+    isBoolean(value.upper_host_localization) &&
+    isBoolean(value.upper_host)
+  )
+}
+
+export function isChassisStateWebSocketMessage(
+  value: unknown,
+): value is ChassisStateWebSocketMessage {
+  if (!isRecord(value) || !isString(value.type) || !isString(value.time)) {
+    return false
+  }
+
+  if (value.type === "chassis_state_snapshot") {
+    return isChassisStateSnapshot(value.snapshot)
+  }
+
+  return (
+    value.type === "chassis_state_error" &&
+    isString(value.code) &&
+    isString(value.message)
   )
 }
 
