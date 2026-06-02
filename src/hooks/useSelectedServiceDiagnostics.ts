@@ -215,7 +215,6 @@ export function useSelectedServiceDiagnostics(
         })
         setLatestError(null)
         setDetailRefreshIndex((current) => current + 1)
-        setStatsRefreshIndex((current) => current + 1)
 
         return response
       } catch (error) {
@@ -640,6 +639,11 @@ export function useSelectedServiceDiagnostics(
 
   useEffect(() => {
     if (!serviceName) {
+      setStats(initialRequestState)
+      return
+    }
+
+    if (statsRefreshIndex === 0) {
       setStats(initialRequestState)
       return
     }

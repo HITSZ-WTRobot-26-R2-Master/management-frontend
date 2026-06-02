@@ -15,7 +15,6 @@ import {
   ListFilter,
   LoaderCircle,
   PlugZap,
-  RadioTower,
   RefreshCw,
   RotateCcw,
   Send,
@@ -122,10 +121,7 @@ import type {
   ServiceStats,
   ServiceStatus,
 } from "@/types/management"
-import {
-  getCommandConfirmationState,
-  isHighRisk,
-} from "@/lib/command-confirmation"
+import { getCommandConfirmationState } from "@/lib/command-confirmation"
 import {
   formatRosSummary,
   getToneForOverallLevel,
@@ -245,21 +241,6 @@ const overallIcons: Record<OverallLevel, LucideIcon> = {
   error: XCircle,
   unknown: CircleHelp,
 }
-
-type DetailTab = "status" | "docker" | "ros" | "logs" | "stats" | "restart"
-
-const detailTabs: Array<{
-  id: DetailTab
-  label: string
-  icon: LucideIcon
-}> = [
-  { id: "status", label: "状态", icon: Gauge },
-  { id: "docker", label: "Docker", icon: Container },
-  { id: "ros", label: "ROS", icon: RadioTower },
-  { id: "logs", label: "日志", icon: FileText },
-  { id: "stats", label: "统计", icon: Cpu },
-  { id: "restart", label: "重启", icon: RotateCcw },
-]
 
 function decodeRouteParam(value: string) {
   try {
@@ -2485,7 +2466,7 @@ function ServiceInspector({
     stderr: true,
     timestamps: true,
   })
-  const [activeDetailTab, setActiveDetailTab] = useState<DetailTab>("status")
+  const [statsExpanded, setStatsExpanded] = useState(false)
   const diagnosticsServiceName = routeServiceName || service?.service_name || null
   const diagnostics = useSelectedServiceDiagnostics(
     diagnosticsServiceName,
@@ -2494,13 +2475,32 @@ function ServiceInspector({
   )
   const detailService = diagnostics.detail.data ?? service
 
+  useEffect(() => {
+    setStatsExpanded(false)
+  }, [detailService?.service_name])
+
+  const detailBusy = diagnostics.detail.loading || diagnostics.detail.refreshing
+  const statsBusy = diagnostics.stats.loading || diagnostics.stats.refreshing
+
+  const handleToggleStats = useCallback(() => {
+    setStatsExpanded((current) => {
+      const next = !current
+
+      if (next) {
+        diagnostics.refreshStats()
+      }
+
+      return next
+    })
+  }, [diagnostics])
+
   return (
     <div className="grid h-full min-h-0 gap-4 xl:grid-cols-[minmax(0,1fr)_240px]">
       <aside className="flex h-full min-h-0 flex-col overflow-hidden rounded-lg border border-border bg-card shadow-sm">
         <section className="shrink-0 border-b border-border p-4">
           {detailService ? (
             <>
-              <div className="flex items-start justify-between gap-4">
+              <div className="flex flex-wrap items-start justify-between gap-4">
                 <div className="min-w-0">
                   <p className="text-sm font-medium text-muted-foreground">
                     当前服务
@@ -2512,9 +2512,54 @@ function ServiceInspector({
                     {detailService.service_name}
                   </p>
                 </div>
-                <StatusPill level={detailService.overall.level}>
-                  {formatOverallLevel(detailService.overall.level)}
-                </StatusPill>
+                <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+                  <StatusPill level={detailService.overall.level}>
+                    {formatOverallLevel(detailService.overall.level)}
+                  </StatusPill>
+                  <button
+                    type="button"
+                    className="inline-flex h-9 items-center gap-2 rounded-md border border-border bg-card px-3 text-sm font-semibold text-card-foreground hover:bg-muted disabled:cursor-not-allowed disabled:opacity-70"
+                    onClick={diagnostics.refreshDetail}
+                    disabled={detailBusy}
+                  >
+                    <RefreshCw
+                      aria-hidden="true"
+                      className={cn("size-4", detailBusy && "animate-spin")}
+                    />
+                    刷新详情
+                  </button>
+                  <button
+                    type="button"
+                    className={cn(
+                      "inline-flex h-9 items-center gap-2 rounded-md border px-3 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-70",
+                      statsExpanded
+                        ? "border-primary bg-primary text-primary-foreground hover:bg-primary/90"
+                        : "border-border bg-card text-card-foreground hover:bg-muted",
+                    )}
+                    disabled={!detailService || statsBusy}
+                    onClick={handleToggleStats}
+                    aria-expanded={statsExpanded}
+                  >
+                    <Cpu aria-hidden="true" className="size-4" />
+                    统计
+                  </button>
+                  <button
+                    type="button"
+                    className="inline-flex h-9 items-center gap-2 rounded-md border border-red-700 bg-red-700 px-3 text-sm font-semibold text-white hover:bg-red-800 disabled:cursor-not-allowed disabled:opacity-70"
+                    disabled={!detailService || diagnostics.restart.submitting}
+                    onClick={() => void diagnostics.restartHard("")}
+                  >
+                    {diagnostics.restart.submitting ? (
+                      <LoaderCircle
+                        aria-hidden="true"
+                        className="size-4 animate-spin"
+                      />
+                    ) : (
+                      <RotateCcw aria-hidden="true" className="size-4" />
+                    )}
+                    硬重启
+                  </button>
+                </div>
               </div>
 
               <dl className="mt-4 grid grid-cols-4 gap-3 text-sm">
@@ -2524,37 +2569,20 @@ function ServiceInspector({
                 <DetailItem label="风险" value={formatRiskLevel(detailService.risk_level)} />
               </dl>
 
-              <div className="mt-4 flex flex-wrap items-center gap-3">
-                <button
-                  type="button"
-                  className="inline-flex h-9 items-center gap-2 rounded-md border border-border bg-card px-3 text-sm font-semibold text-card-foreground hover:bg-muted disabled:cursor-not-allowed disabled:opacity-70"
-                  onClick={diagnostics.refreshDetail}
-                  disabled={
-                    diagnostics.detail.loading || diagnostics.detail.refreshing
-                  }
-                >
-                  <RefreshCw
-                    aria-hidden="true"
-                    className={cn(
-                      "size-4",
-                      (diagnostics.detail.loading ||
-                        diagnostics.detail.refreshing) &&
-                        "animate-spin",
-                    )}
-                  />
-                  刷新详情
-                </button>
-                <span className="text-xs text-muted-foreground">
-                  {diagnostics.detail.loadedAt
-                    ? `详情已加载 ${formatTimestamp(
-                        diagnostics.detail.loadedAt,
-                      )}`
-                    : "详情会从当前选中的逻辑服务加载"}
-                </span>
-              </div>
+              <p className="mt-4 text-xs text-muted-foreground">
+                {diagnostics.detail.loadedAt
+                  ? `详情已加载 ${formatTimestamp(diagnostics.detail.loadedAt)}`
+                  : "详情会从当前选中的逻辑服务加载"}
+              </p>
 
               {diagnostics.detail.error ? (
                 <PanelError error={diagnostics.detail.error} />
+              ) : null}
+              {diagnostics.restart.error ? (
+                <PanelError error={diagnostics.restart.error} />
+              ) : null}
+              {diagnostics.restart.response ? (
+                <RestartResultLine response={diagnostics.restart.response} />
               ) : null}
             </>
           ) : (
@@ -2574,59 +2602,16 @@ function ServiceInspector({
           )}
         </section>
 
-        <nav
-          aria-label="服务详情"
-          className="flex shrink-0 flex-wrap gap-2 border-b border-border p-3"
-          role="tablist"
-        >
-          {detailTabs.map((tab) => {
-            const active = tab.id === activeDetailTab
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4">
+          <LogsPanel
+            logs={diagnostics.logs}
+            options={logOptions}
+            service={detailService}
+            onRefresh={diagnostics.refreshLogs}
+            onUpdateOptions={setLogOptions}
+          />
 
-            return (
-              <button
-                key={tab.id}
-                type="button"
-                className={cn(
-                  "inline-flex h-9 items-center gap-2 rounded-md border px-3 text-sm font-medium",
-                  active
-                    ? "border-primary bg-primary text-primary-foreground"
-                    : "border-border bg-card text-muted-foreground hover:bg-muted hover:text-card-foreground",
-                )}
-                aria-selected={active}
-                role="tab"
-                onClick={() => setActiveDetailTab(tab.id)}
-              >
-                <tab.icon aria-hidden="true" className="size-4" />
-                {tab.label}
-              </button>
-            )
-          })}
-        </nav>
-
-        <div className="min-h-0 flex-1 overflow-y-auto p-4">
-          {activeDetailTab === "status" ? (
-            <StatusLayersPanel service={detailService} />
-          ) : null}
-
-          {activeDetailTab === "docker" ? (
-            <DockerDetailPanel service={detailService} />
-          ) : null}
-
-          {activeDetailTab === "ros" ? (
-            <RosDetailPanel definition={definition} service={detailService} />
-          ) : null}
-
-          {activeDetailTab === "logs" ? (
-            <LogsPanel
-              logs={diagnostics.logs}
-              options={logOptions}
-              service={detailService}
-              onRefresh={diagnostics.refreshLogs}
-              onUpdateOptions={setLogOptions}
-            />
-          ) : null}
-
-          {activeDetailTab === "stats" ? (
+          {statsExpanded ? (
             <StatsPanel
               error={diagnostics.stats.error}
               loadedAt={diagnostics.stats.loadedAt}
@@ -2638,15 +2623,7 @@ function ServiceInspector({
             />
           ) : null}
 
-          {activeDetailTab === "restart" ? (
-            <HardRestartPanel
-              error={diagnostics.restart.error}
-              response={diagnostics.restart.response}
-              service={detailService}
-              submitting={diagnostics.restart.submitting}
-              onRestart={diagnostics.restartHard}
-            />
-          ) : null}
+          <CombinedStatusPanel definition={definition} service={detailService} />
         </div>
       </aside>
 
@@ -2747,38 +2724,6 @@ function ServiceContainerSwitcher({
   )
 }
 
-function StatusLayersPanel({ service }: { service: ServiceStatus | null }) {
-  return (
-    <section className="rounded-lg border border-border bg-card p-5 shadow-sm">
-      <h3 className="flex items-center gap-2 text-base font-semibold text-card-foreground">
-        <Gauge aria-hidden="true" className="size-4" />
-        状态层
-      </h3>
-      <div className="mt-4 space-y-3">
-        <LayerLine
-          icon={Activity}
-          label="总体"
-          value={
-            service
-              ? `${formatOverallLevel(service.overall.level)}：${formatDisplaySummary(service.overall.reason)}`
-              : "未选择服务"
-          }
-        />
-        <LayerLine
-          icon={Container}
-          label="Docker"
-          value={service ? formatDockerSummary(service) : "等待后端状态"}
-        />
-        <LayerLine
-          icon={RadioTower}
-          label="ROS"
-          value={service ? formatRosSummary(service) : "等待后端状态"}
-        />
-      </div>
-    </section>
-  )
-}
-
 function DetailItem({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-md border border-border bg-muted/60 p-3">
@@ -2786,26 +2731,6 @@ function DetailItem({ label, value }: { label: string; value: string }) {
       <dd className="mt-1 truncate font-semibold capitalize text-card-foreground">
         {value}
       </dd>
-    </div>
-  )
-}
-
-interface LayerLineProps {
-  icon: LucideIcon
-  label: string
-  value: string
-}
-
-function LayerLine({ icon: Icon, label, value }: LayerLineProps) {
-  return (
-    <div className="rounded-md border border-border bg-muted/60 p-3">
-      <div className="flex items-center gap-2">
-        <Icon aria-hidden="true" className="size-4 text-primary" />
-        <span className="text-sm font-semibold text-card-foreground">
-          {label}
-        </span>
-      </div>
-      <p className="mt-2 text-sm text-muted-foreground">{value}</p>
     </div>
   )
 }
@@ -2822,87 +2747,74 @@ function PanelError({ error }: { error: ApiError }) {
   )
 }
 
-function DockerDetailPanel({ service }: { service: ServiceStatus | null }) {
-  const docker = service?.docker
-
-  return (
-    <section className="rounded-lg border border-border bg-card p-5 shadow-sm">
-      <PanelHeader
-        detail={
-          service
-            ? `容器 ${service.container_name}`
-            : "等待选择服务"
-        }
-        icon={Container}
-        title="Docker 详情"
-      />
-      {docker ? (
-        <dl className="mt-4 grid grid-cols-2 gap-3 text-sm">
-          <DetailItem label="存在" value={formatBoolean(docker.exists)} />
-          <DetailItem label="状态" value={formatDockerState(docker.state)} />
-          <DetailItem label="运行中" value={formatBoolean(docker.running)} />
-          <DetailItem label="状态文本" value={docker.status ?? "未上报"} />
-          <DetailItem
-            label="开始时间"
-            value={formatNullableTimestamp(docker.started_at)}
-          />
-          <DetailItem
-            label="结束时间"
-            value={formatNullableTimestamp(docker.finished_at)}
-          />
-          <DetailItem
-            label="退出码"
-            value={
-              docker.exit_code === null
-                ? "未上报"
-                : docker.exit_code.toString()
-            }
-          />
-          <DetailItem
-            label="重启次数"
-            value={formatNullableNumber(docker.restart_count)}
-          />
-          <DetailItem label="健康状态" value={docker.health ?? "未上报"} />
-        </dl>
-      ) : (
-        <EmptyPanelText text="选择已注册服务后加载 Docker 状态。" />
-      )}
-    </section>
-  )
-}
-
-function RosDetailPanel({
+function CombinedStatusPanel({
   definition,
   service,
 }: {
   definition: ServiceDefinition | null
   service: ServiceStatus | null
 }) {
+  const docker = service?.docker
   const ros = service?.ros
 
   return (
     <section className="rounded-lg border border-border bg-card p-5 shadow-sm">
       <PanelHeader
         detail={
-          ros
-            ? `${ros.expected_nodes.length} 个预期节点，${ros.topics.length} 个话题`
+          service
+            ? `${formatDockerSummary(service)}；${formatRosSummary(service)}`
             : "等待选择服务"
         }
-        icon={RadioTower}
-        title="ROS 详情"
+        icon={Gauge}
+        title="状态总览"
       />
-      {ros ? (
-        <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(260px,0.8fr)_minmax(0,1.2fr)]">
-          <dl className="grid grid-cols-2 gap-3 text-sm">
+
+      {service && docker && ros ? (
+        <div className="mt-4 space-y-4">
+          <dl className="grid gap-3 text-sm md:grid-cols-3 xl:grid-cols-4">
             <DetailItem
-              label="代理"
+              label="总体"
+              value={`${formatOverallLevel(service.overall.level)}：${formatDisplaySummary(service.overall.reason)}`}
+            />
+            <DetailItem
+              label="Docker"
+              value={`${formatDockerState(docker.state)} / 运行=${formatBoolean(
+                docker.running,
+              )}`}
+            />
+            <DetailItem label="容器状态" value={docker.status ?? "未上报"} />
+            <DetailItem
+              label="重启次数"
+              value={formatRestartCount(docker.restart_count)}
+            />
+            <DetailItem
+              label="退出码"
+              value={
+                docker.exit_code === null
+                  ? "未上报"
+                  : docker.exit_code.toString()
+              }
+            />
+            <DetailItem label="健康状态" value={docker.health ?? "未上报"} />
+            <DetailItem
+              label="ROS 代理"
               value={ros.agent_available ? "可用" : "不可用"}
             />
-            <DetailItem label="等级" value={formatOverallLevel(ros.level)} />
-            <DetailItem label="摘要" value={formatDisplaySummary(ros.summary)} />
             <DetailItem
-              label="配置话题数"
-              value={(definition?.expected_topics.length ?? 0).toString()}
+              label="ROS 等级"
+              value={`${formatOverallLevel(ros.level)}：${formatDisplaySummary(
+                ros.summary,
+              )}`}
+            />
+            <DetailItem
+              label="ROS 节点"
+              value={`${ros.expected_nodes.length} 个预期节点`}
+            />
+            <DetailItem
+              label="ROS 话题"
+              value={`${ros.topics.length} 个观测话题 / ${
+                definition?.expected_topics.length ?? 0
+              } 个配置话题`}
             />
           </dl>
 
@@ -2993,7 +2905,7 @@ function RosDetailPanel({
           </div>
         </div>
       ) : (
-        <EmptyPanelText text="选择已注册服务后加载 ROS 诊断。" />
+        <EmptyPanelText text="选择已注册服务后加载状态总览。" />
       )}
     </section>
   )
@@ -3031,6 +2943,7 @@ function LogsPanel({
 }) {
   const logViewportRef = useRef<HTMLPreElement | null>(null)
   const [autoFollow, setAutoFollow] = useState(true)
+  const [configOpen, setConfigOpen] = useState(false)
   const busy = logs.loading || logs.refreshing
   const lines = logs.data?.lines ?? []
   const containerName = logs.data?.container_name ?? service?.container_name ?? null
@@ -3080,94 +2993,101 @@ function LogsPanel({
           icon={FileText}
           title="Docker 日志"
         />
-        <span
-          className={cn(
-            "inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs font-semibold",
-            streamState.className,
-          )}
-        >
-          <streamState.icon
-            aria-hidden="true"
-            className={cn("size-3.5", busy && "animate-spin")}
-          />
-          {streamState.label}
-        </span>
-      </div>
-      <div className="mt-4 grid gap-3 sm:grid-cols-[120px_1fr]">
-        <label className="grid gap-2">
-          <span className="text-xs font-semibold uppercase text-muted-foreground">
-            尾部行数
-          </span>
-          <input
-            className="h-10 rounded-md border border-input bg-card px-3 text-sm text-card-foreground outline-none transition focus:border-ring focus:ring-2 focus:ring-ring/20 disabled:cursor-not-allowed disabled:opacity-60"
-            disabled={!service || busy}
-            max={1000}
-            min={1}
-            type="number"
-            value={options.tail}
-            onChange={(event) =>
-              onUpdateOptions({
-                ...options,
-                tail: clampLogTail(Number(event.target.value)),
-              })
-            }
-          />
-        </label>
-        <div className="flex flex-wrap items-end gap-3">
-          <ToggleCheckbox
-            checked={options.stdout}
-            disabled={!service || busy}
-            label="stdout"
-            onChange={(stdout) => onUpdateOptions({ ...options, stdout })}
-          />
-          <ToggleCheckbox
-            checked={options.stderr}
-            disabled={!service || busy}
-            label="stderr"
-            onChange={(stderr) => onUpdateOptions({ ...options, stderr })}
-          />
-          <ToggleCheckbox
-            checked={options.timestamps}
-            disabled={!service || busy}
-            label="时间戳"
-            onChange={(timestamps) =>
-              onUpdateOptions({ ...options, timestamps })
-            }
-          />
+        <div className="relative">
           <button
             type="button"
-            className="inline-flex h-10 items-center gap-2 rounded-md border border-border bg-card px-3 text-sm font-semibold text-card-foreground hover:bg-muted disabled:cursor-not-allowed disabled:opacity-70"
+            className="inline-flex h-9 items-center gap-2 rounded-md border border-border bg-card px-3 text-sm font-semibold text-card-foreground hover:bg-muted disabled:cursor-not-allowed disabled:opacity-70"
             disabled={!service || busy}
-            onClick={onRefresh}
+            onClick={() => setConfigOpen((current) => !current)}
+            aria-expanded={configOpen}
           >
-            <RefreshCw
-              aria-hidden="true"
-              className={cn("size-4", busy && "animate-spin")}
-            />
-            重新连接
+            <ListFilter aria-hidden="true" className="size-4" />
+            日志配置
           </button>
+          {configOpen ? (
+            <div className="absolute right-0 z-20 mt-2 w-72 rounded-md border border-border bg-card p-3 text-sm shadow-lg">
+              <label className="grid gap-2">
+                <span className="text-xs font-semibold uppercase text-muted-foreground">
+                  尾部行数
+                </span>
+                <input
+                  className="h-10 rounded-md border border-input bg-card px-3 text-sm text-card-foreground outline-none transition focus:border-ring focus:ring-2 focus:ring-ring/20 disabled:cursor-not-allowed disabled:opacity-60"
+                  disabled={!service || busy}
+                  max={1000}
+                  min={1}
+                  type="number"
+                  value={options.tail}
+                  onChange={(event) =>
+                    onUpdateOptions({
+                      ...options,
+                      tail: clampLogTail(Number(event.target.value)),
+                    })
+                  }
+                />
+              </label>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <ToggleCheckbox
+                  checked={options.stdout}
+                  disabled={!service || busy}
+                  label="stdout"
+                  onChange={(stdout) => onUpdateOptions({ ...options, stdout })}
+                />
+                <ToggleCheckbox
+                  checked={options.stderr}
+                  disabled={!service || busy}
+                  label="stderr"
+                  onChange={(stderr) => onUpdateOptions({ ...options, stderr })}
+                />
+                <ToggleCheckbox
+                  checked={options.timestamps}
+                  disabled={!service || busy}
+                  label="时间戳"
+                  onChange={(timestamps) =>
+                    onUpdateOptions({ ...options, timestamps })
+                  }
+                />
+              </div>
+              <button
+                type="button"
+                className="mt-3 inline-flex h-9 w-full items-center justify-center gap-2 rounded-md border border-border bg-card px-3 text-sm font-semibold text-card-foreground hover:bg-muted disabled:cursor-not-allowed disabled:opacity-70"
+                disabled={!service || busy}
+                onClick={() => {
+                  setConfigOpen(false)
+                  onRefresh()
+                }}
+              >
+                <RefreshCw
+                  aria-hidden="true"
+                  className={cn("size-4", busy && "animate-spin")}
+                />
+                重新连接
+              </button>
+            </div>
+          ) : null}
         </div>
       </div>
 
       {logs.error ? <PanelError error={logs.error} /> : null}
-      <dl className="mt-4 grid gap-3 text-sm md:grid-cols-4">
-        <DetailItem
-          label="连接状态"
-          value={streamState.label}
+      <p
+        className={cn(
+          "mt-4 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-sm font-semibold",
+          streamState.textClassName,
+        )}
+      >
+        <streamState.icon
+          aria-hidden="true"
+          className={cn("size-4 shrink-0", busy && "animate-spin")}
         />
-        <DetailItem
-          label="接受尾部"
-          value={`${logs.acceptedTail} 行`}
-        />
-        <DetailItem
-          label="自动跟随"
-          value={autoFollow ? "开启" : "已暂停"}
-        />
-        <DetailItem
-          label="最新日志"
-          value={logs.lastLineAt ? formatTimestamp(logs.lastLineAt) : "等待"}
-        />
-      </dl>
+        <span>{streamState.label}</span>
+        <span className="text-muted-foreground">·</span>
+        <span>{`缓存 ${lines.length}/${logs.acceptedTail} 行`}</span>
+        <span className="text-muted-foreground">·</span>
+        <span>{autoFollow ? "自动跟随" : "跟随已暂停"}</span>
+        <span className="text-muted-foreground">·</span>
+        <span>
+          最新 {logs.lastLineAt ? formatTimestamp(logs.lastLineAt) : "等待"}
+        </span>
+      </p>
       <p className="mt-4 text-xs text-muted-foreground">
         日志是 <code>{service?.service_name ?? "未选择服务"}</code>{" "}
         的非结构化 Docker 容器输出
@@ -3236,6 +3156,11 @@ function StatsPanel({
           刷新
         </button>
       </div>
+      {busy ? (
+        <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-sky-100">
+          <div className="h-full w-1/2 animate-pulse rounded-full bg-sky-600" />
+        </div>
+      ) : null}
       {error ? <PanelError error={error} /> : null}
       {stats ? (
         <dl className="mt-4 grid grid-cols-2 gap-3 text-sm">
@@ -3268,6 +3193,8 @@ function StatsPanel({
           />
           <DetailItem label="PIDs" value={stats.pids_current.toString()} />
         </dl>
+      ) : busy ? (
+        <EmptyPanelText text="正在刷新 Docker 统计快照。" />
       ) : (
         <EmptyPanelText text="选择已注册服务后加载一次 Docker 统计快照。" />
       )}
@@ -3275,106 +3202,15 @@ function StatsPanel({
   )
 }
 
-function HardRestartPanel({
-  error,
-  response,
-  service,
-  submitting,
-  onRestart,
-}: {
-  error: ApiError | null
-  response: RestartResponse | null
-  service: ServiceStatus | null
-  submitting: boolean
-  onRestart: (reason: string) => Promise<RestartResponse | null>
-}) {
-  const [reason, setReason] = useState("")
-  const [riskConfirmed, setRiskConfirmed] = useState(false)
-  const highRiskService =
-    service && isHighRisk(service.risk_level) ? service : null
-  const requiresRiskConfirm = highRiskService !== null
-  const disabled =
-    !service || submitting || (requiresRiskConfirm && !riskConfirmed)
-
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    const result = await onRestart(reason)
-
-    if (result) {
-      setReason("")
-      setRiskConfirmed(false)
-    }
-  }
-
+function RestartResultLine({ response }: { response: RestartResponse }) {
   return (
-    <section className="rounded-lg border border-red-200 bg-red-50/60 p-5 shadow-sm">
-      <PanelHeader
-        detail="向当前逻辑服务提交硬重启模式"
-        icon={RotateCcw}
-        title="硬重启"
-      />
-      <form className="mt-4 space-y-4" onSubmit={handleSubmit}>
-        <label className="grid gap-2">
-          <span className="text-xs font-semibold uppercase text-red-900">
-            可选原因
-          </span>
-          <textarea
-            className="min-h-20 resize-y rounded-md border border-red-200 bg-card px-3 py-2 text-sm text-card-foreground outline-none transition focus:border-red-400 focus:ring-2 focus:ring-red-300/40 disabled:cursor-not-allowed disabled:opacity-60"
-            disabled={!service || submitting}
-            value={reason}
-            onChange={(event) => setReason(event.target.value)}
-          />
-        </label>
-
-        {requiresRiskConfirm ? (
-          <label className="flex items-start gap-3 rounded-md border border-red-200 bg-card p-3 text-sm text-red-900">
-            <input
-              checked={riskConfirmed}
-              className="mt-1 size-4"
-              disabled={submitting}
-              type="checkbox"
-              onChange={(event) => setRiskConfirmed(event.target.checked)}
-            />
-            <span>
-              确认对 <strong>{highRiskService.display_name}</strong>{" "}
-              执行高风险硬重启。这是第二次显式操作员确认。
-            </span>
-          </label>
-        ) : null}
-
-        <button
-          type="submit"
-          className="inline-flex h-10 items-center gap-2 rounded-md border border-red-700 bg-red-700 px-3 text-sm font-semibold text-white hover:bg-red-800 disabled:cursor-not-allowed disabled:opacity-70"
-          disabled={disabled}
-        >
-          {submitting ? (
-            <LoaderCircle
-              aria-hidden="true"
-              className="size-4 animate-spin"
-            />
-          ) : (
-            <RotateCcw aria-hidden="true" className="size-4" />
-          )}
-          硬重启
-        </button>
-      </form>
-
-      {error ? <PanelError error={error} /> : null}
-      {response ? (
-        <dl className="mt-4 grid grid-cols-2 gap-3 text-sm">
-          <DetailItem label="请求 ID" value={response.request_id} />
-          <DetailItem
-            label="开始时间"
-            value={formatNullableTimestamp(response.started_at)}
-          />
-          <DetailItem
-            label="结束时间"
-            value={formatNullableTimestamp(response.finished_at)}
-          />
-          <DetailItem label="结果" value={formatResult(response.result)} />
-        </dl>
-      ) : null}
-    </section>
+    <p className="mt-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-800">
+      硬重启{formatResult(response.result)}，请求 {response.request_id}
+      ，开始 {formatNullableTimestamp(response.started_at)}
+      {response.finished_at
+        ? `，结束 ${formatNullableTimestamp(response.finished_at)}`
+        : ""}
+    </p>
   )
 }
 
@@ -3739,10 +3575,6 @@ function formatNullableTimestamp(value: string | null) {
   return value ? formatTimestamp(value) : "未上报"
 }
 
-function formatNullableNumber(value: number | null) {
-  return value === null ? "未上报" : value.toString()
-}
-
 function formatRestartCount(value: number | null) {
   return value === null ? "未上报" : `${value} 次`
 }
@@ -3765,12 +3597,14 @@ function getServiceLogStreamStateCopy(logs: ServiceLogsState): {
   className: string
   icon: LucideIcon
   label: string
+  textClassName: string
 } {
   if (logs.status === "live") {
     return {
       className: "border-emerald-200 bg-emerald-50 text-emerald-800",
       icon: Wifi,
       label: "实时日志",
+      textClassName: "text-emerald-800",
     }
   }
 
@@ -3779,6 +3613,7 @@ function getServiceLogStreamStateCopy(logs: ServiceLogsState): {
       className: "border-sky-200 bg-sky-50 text-sky-800",
       icon: LoaderCircle,
       label: "正在连接",
+      textClassName: "text-sky-800",
     }
   }
 
@@ -3787,6 +3622,7 @@ function getServiceLogStreamStateCopy(logs: ServiceLogsState): {
       className: "border-amber-200 bg-amber-50 text-amber-900",
       icon: RefreshCw,
       label: "REST 回退",
+      textClassName: "text-amber-900",
     }
   }
 
@@ -3795,6 +3631,7 @@ function getServiceLogStreamStateCopy(logs: ServiceLogsState): {
       className: "border-zinc-200 bg-zinc-50 text-zinc-700",
       icon: WifiOff,
       label: "日志流结束",
+      textClassName: "text-zinc-700",
     }
   }
 
@@ -3803,6 +3640,7 @@ function getServiceLogStreamStateCopy(logs: ServiceLogsState): {
       className: "border-amber-200 bg-amber-50 text-amber-900",
       icon: KeyRound,
       label: "需要令牌",
+      textClassName: "text-amber-900",
     }
   }
 
@@ -3811,6 +3649,7 @@ function getServiceLogStreamStateCopy(logs: ServiceLogsState): {
       className: "border-red-200 bg-red-50 text-red-800",
       icon: XCircle,
       label: "日志流错误",
+      textClassName: "text-red-800",
     }
   }
 
@@ -3818,6 +3657,7 @@ function getServiceLogStreamStateCopy(logs: ServiceLogsState): {
     className: "border-zinc-200 bg-zinc-50 text-zinc-700",
     icon: FileText,
     label: "未连接",
+    textClassName: "text-zinc-700",
   }
 }
 
