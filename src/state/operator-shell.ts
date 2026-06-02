@@ -14,7 +14,7 @@ import type {
 } from "@/types/management"
 
 const baseUrlStorage = createJSONStorage<string>(() => localStorage)
-const authTokenStorage = createJSONStorage<string>(() => sessionStorage)
+const authTokenStorage = createJSONStorage<string>(() => localStorage)
 
 export const baseUrlAtom = atomWithStorage(
   "r2-management.base-url",
