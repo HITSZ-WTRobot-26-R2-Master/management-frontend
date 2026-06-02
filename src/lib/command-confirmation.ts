@@ -23,9 +23,7 @@ export function getCommandConfirmationState({
   submitting,
 }: CommandConfirmationInput): CommandConfirmationState {
   const requiresConfirm =
-    command.backend.requires_confirm ||
-    isHighRisk(command.backend.risk_level) ||
-    error?.code === "command_confirm_required"
+    command.backend.requires_confirm || error?.code === "command_confirm_required"
 
   return {
     canSubmit: !submitting && (!requiresConfirm || operatorConfirmed),

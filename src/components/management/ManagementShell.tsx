@@ -1,7 +1,6 @@
 import {
   Bell,
   Boxes,
-  DatabaseZap,
   Gauge,
   RefreshCw,
   ServerCog,
@@ -15,7 +14,6 @@ export type ManagementTab =
   | "overview"
   | "services"
   | "details"
-  | "commands"
   | "events"
   | "settings"
 
@@ -28,7 +26,6 @@ const navItems: Array<{
   { id: "overview", label: "总览", icon: Gauge, to: "/overview" },
   { id: "services", label: "服务", icon: Boxes, to: "/services" },
   { id: "details", label: "详情", icon: ServerCog, to: "/services" },
-  { id: "commands", label: "命令", icon: DatabaseZap, to: "/commands" },
   { id: "events", label: "事件", icon: Bell, to: "/events" },
   { id: "settings", label: "设置", icon: Settings, to: "/settings" },
 ]
@@ -38,6 +35,7 @@ interface ManagementShellProps {
   connectionStatus: ReactNode
   detailPath: string
   detailsDisabled: boolean
+  quickCommands?: ReactNode
   refreshing: boolean
   onRefresh: () => void
 }
@@ -47,6 +45,7 @@ export function ManagementShell({
   connectionStatus,
   detailPath,
   detailsDisabled,
+  quickCommands,
   refreshing,
   onRefresh,
 }: ManagementShellProps) {
@@ -86,42 +85,52 @@ export function ManagementShell({
             {children}
           </main>
           <aside className="order-first shrink-0 overflow-x-auto xl:order-none xl:w-40 xl:overflow-visible">
-            <nav
-              aria-label="管理导航"
-              className="flex w-max gap-2 xl:w-full xl:flex-col"
-              role="tablist"
-            >
-              {navItems.map((item) => {
-                const to = item.id === "details" ? detailPath : item.to
-                const disabled = item.id === "details" && detailsDisabled
+            <div className="flex w-max gap-2 xl:w-full xl:flex-col">
+              <nav
+                aria-label="管理导航"
+                className="flex gap-2 xl:w-full xl:flex-col"
+                role="tablist"
+              >
+                {navItems.map((item) => {
+                  const to = item.id === "details" ? detailPath : item.to
+                  const disabled = item.id === "details" && detailsDisabled
 
-                return (
-                  <NavLink
-                    aria-disabled={disabled}
-                    aria-label={disabled ? "详情：等待服务快照" : undefined}
-                    end={item.id !== "details"}
-                    key={item.id}
-                    to={to}
-                    role="tab"
-                    className={({ isActive }) => {
-                      const active = isActive && !disabled
+                  return (
+                    <NavLink
+                      aria-disabled={disabled}
+                      aria-label={disabled ? "详情：等待服务快照" : undefined}
+                      end={item.id !== "details"}
+                      key={item.id}
+                      to={to}
+                      role="tab"
+                      className={({ isActive }) => {
+                        const active = isActive && !disabled
 
-                      return cn(
-                        "inline-flex h-9 items-center gap-2 rounded-md border px-3 text-sm font-medium xl:w-full xl:justify-start",
-                        active
-                          ? "border-primary bg-primary text-primary-foreground"
-                          : "border-border bg-card text-muted-foreground hover:bg-muted hover:text-card-foreground",
-                        disabled &&
-                          "pointer-events-none cursor-not-allowed opacity-60",
-                      )
-                    }}
-                  >
-                    <item.icon aria-hidden="true" className="size-4" />
-                    {item.label}
-                  </NavLink>
-                )
-              })}
-            </nav>
+                        return cn(
+                          "inline-flex h-9 items-center gap-2 rounded-md border px-3 text-sm font-medium xl:w-full xl:justify-start",
+                          active
+                            ? "border-primary bg-primary text-primary-foreground"
+                            : "border-border bg-card text-muted-foreground hover:bg-muted hover:text-card-foreground",
+                          disabled &&
+                            "pointer-events-none cursor-not-allowed opacity-60",
+                        )
+                      }}
+                    >
+                      <item.icon aria-hidden="true" className="size-4" />
+                      {item.label}
+                    </NavLink>
+                  )
+                })}
+              </nav>
+              {quickCommands ? (
+                <div
+                  aria-label="快捷命令"
+                  className="flex gap-2 border-l border-border pl-2 xl:w-full xl:flex-col xl:border-l-0 xl:border-t xl:pl-0 xl:pt-3"
+                >
+                  {quickCommands}
+                </div>
+              ) : null}
+            </div>
           </aside>
         </div>
       </div>

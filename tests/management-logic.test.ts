@@ -1,8 +1,12 @@
 import { describe, expect, test } from "bun:test"
+import { getCommandConfirmationState } from "../src/lib/command-confirmation"
 import {
-  getCommandConfirmationState,
-  isHighRisk,
-} from "../src/lib/command-confirmation"
+  DEFAULT_RESET_ORIGIN_PAYLOAD,
+  readResetOriginSessionPayload,
+  RESET_ORIGIN_SESSION_STORAGE_KEY,
+  toResetOriginJsonPayload,
+  writeResetOriginSessionPayload,
+} from "../src/lib/reset-origin-payload"
 import { reduceServiceStatusesForEvent } from "../src/lib/event-reducer"
 import {
   buildManagementHttpUrl,
@@ -141,6 +145,51 @@ describe("management API errors", () => {
       port: 8080,
       agent_url: "http://127.0.0.1:8090",
     })
+  })
+
+  test("loads reset_origin presets from the dedicated endpoint", async () => {
+    const client = new ManagementApiClient({
+      baseUrl: "/management-api",
+      token: "operator-token",
+      fetchImpl: async (input, init) => {
+        expect(input.toString()).toBe(
+          "/management-api/api/commands/reset_origin/presets",
+        )
+        expect(new Headers(init?.headers).get("Authorization")).toBe(
+          "Bearer operator-token",
+        )
+
+        return new Response(
+          JSON.stringify([
+            {
+              id: "field_origin",
+              label: "场地原点",
+              pose_x: 0,
+              pose_y: 0,
+              pose_z: 0,
+              pose_yaw_deg: 0,
+            },
+          ]),
+          {
+            headers: {
+              "Content-Type": "application/json",
+            },
+            status: 200,
+          },
+        )
+      },
+    })
+
+    await expect(client.listResetOriginPresets()).resolves.toEqual([
+      {
+        id: "field_origin",
+        label: "场地原点",
+        pose_x: 0,
+        pose_y: 0,
+        pose_z: 0,
+        pose_yaw_deg: 0,
+      },
+    ])
   })
 
   test("detects browser abort errors without relying on Error inheritance", () => {
@@ -532,8 +581,7 @@ describe("command confirmation helpers", () => {
     },
   } satisfies CommandDefinition
 
-  test("requires operator confirmation for high-risk discovered commands", () => {
-    expect(isHighRisk("high")).toBe(true)
+  test("allows reset_origin submission when backend policy does not require confirmation", () => {
     expect(
       getCommandConfirmationState({
         command: resetOriginCommand,
@@ -542,15 +590,35 @@ describe("command confirmation helpers", () => {
         submitting: false,
       }),
     ).toEqual({
-      canSubmit: false,
-      requiresConfirm: true,
+      canSubmit: true,
+      requiresConfirm: false,
     })
   })
 
-  test("allows submission after confirmation without operator reason", () => {
+  test("requires confirmation when backend policy requires it", () => {
+    const confirmRequiredCommand = {
+      ...resetOriginCommand,
+      backend: {
+        risk_level: "high",
+        requires_confirm: true,
+      },
+    } satisfies CommandDefinition
+
     expect(
       getCommandConfirmationState({
-        command: resetOriginCommand,
+        command: confirmRequiredCommand,
+        error: null,
+        operatorConfirmed: false,
+        submitting: false,
+      }),
+    ).toEqual({
+      canSubmit: false,
+      requiresConfirm: true,
+    })
+
+    expect(
+      getCommandConfirmationState({
+        command: confirmRequiredCommand,
         error: null,
         operatorConfirmed: true,
         submitting: false,
@@ -566,12 +634,12 @@ describe("command confirmation helpers", () => {
       getCommandConfirmationState({
         command: resetOriginCommand,
         error: null,
-        operatorConfirmed: true,
+        operatorConfirmed: false,
         submitting: true,
       }),
     ).toEqual({
       canSubmit: false,
-      requiresConfirm: true,
+      requiresConfirm: false,
     })
   })
 
@@ -598,6 +666,82 @@ describe("command confirmation helpers", () => {
       canSubmit: false,
       requiresConfirm: true,
     })
+  })
+})
+
+describe("reset_origin payload helpers", () => {
+  test("builds command payloads without legacy reason", () => {
+    const payload = toResetOriginJsonPayload({
+      pose_x: 1.5,
+      pose_y: -2,
+      pose_z: 0,
+      pose_yaw_deg: 90,
+    })
+
+    expect(payload).toEqual({
+      pose_x: 1.5,
+      pose_y: -2,
+      pose_z: 0,
+      pose_yaw_deg: 90,
+    })
+    expect("reason" in payload).toBe(false)
+  })
+
+  test("reads valid last payloads from session storage", () => {
+    const storage = memoryStorage({
+      [RESET_ORIGIN_SESSION_STORAGE_KEY]: JSON.stringify({
+        pose_x: 3,
+        pose_y: 4,
+        pose_z: 0.2,
+        pose_yaw_deg: -45,
+      }),
+    })
+
+    expect(readResetOriginSessionPayload(storage)).toEqual({
+      pose_x: 3,
+      pose_y: 4,
+      pose_z: 0.2,
+      pose_yaw_deg: -45,
+    })
+  })
+
+  test("ignores damaged or illegal session payloads", () => {
+    expect(
+      readResetOriginSessionPayload(
+        memoryStorage({
+          [RESET_ORIGIN_SESSION_STORAGE_KEY]: "{",
+        }),
+      ),
+    ).toEqual(DEFAULT_RESET_ORIGIN_PAYLOAD)
+
+    expect(
+      readResetOriginSessionPayload(
+        memoryStorage({
+          [RESET_ORIGIN_SESSION_STORAGE_KEY]: JSON.stringify({
+            pose_x: 3,
+            pose_y: "bad",
+            pose_z: 0,
+            pose_yaw_deg: 0,
+          }),
+        }),
+      ),
+    ).toEqual(DEFAULT_RESET_ORIGIN_PAYLOAD)
+  })
+
+  test("writes the last successful reset_origin payload", () => {
+    const storage = memoryStorage()
+    const payload = {
+      pose_x: 1,
+      pose_y: 2,
+      pose_z: 3,
+      pose_yaw_deg: 180,
+    }
+
+    writeResetOriginSessionPayload(payload, storage)
+
+    expect(storage.values.get(RESET_ORIGIN_SESSION_STORAGE_KEY)).toBe(
+      JSON.stringify(payload),
+    )
   })
 })
 
@@ -758,6 +902,18 @@ function chassisStateSnapshot() {
         upper_host_localization: true,
         upper_host: false,
       },
+    },
+  }
+}
+
+function memoryStorage(initial: Record<string, string> = {}) {
+  const values = new Map(Object.entries(initial))
+
+  return {
+    values,
+    getItem: (key: string) => values.get(key) ?? null,
+    setItem: (key: string, value: string) => {
+      values.set(key, value)
     },
   }
 }

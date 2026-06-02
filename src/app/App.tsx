@@ -6,7 +6,7 @@ import {
   CircleHelp,
   Container,
   Cpu,
-  DatabaseZap,
+  Crosshair,
   FileText,
   Gauge,
   KeyRound,
@@ -25,6 +25,7 @@ import {
   TerminalSquare,
   Wifi,
   WifiOff,
+  X,
   XCircle,
 } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
@@ -56,10 +57,16 @@ import { useChassisStateStream } from "@/hooks/useChassisStateStream"
 import {
   type CommandDiscoveryState,
   type CommandSubmissionState,
+  type ResetOriginPresetState,
   isResetOriginCommand,
-  type ResetOriginPayload,
   useCommandDiscovery,
 } from "@/hooks/useCommandDiscovery"
+import {
+  DEFAULT_RESET_ORIGIN_PAYLOAD,
+  readResetOriginSessionPayload,
+  type ResetOriginPayload,
+  writeResetOriginSessionPayload,
+} from "@/lib/reset-origin-payload"
 import { useEventStream } from "@/hooks/useEventStream"
 import {
   DEFAULT_SERVICE_LOG_TAIL,
@@ -98,7 +105,6 @@ import type {
   CommandDefinition,
   CommandResult,
   CommandState,
-  CommandTransport,
   CommandResponse,
   CommandRequestedPayload,
   ConnectionState,
@@ -110,6 +116,7 @@ import type {
   RestartResult,
   RestartRequestedPayload,
   RestartResponse,
+  ResetOriginPreset,
   ServiceDefinition,
   ServiceRiskLevel,
   ServiceStats,
@@ -302,6 +309,9 @@ function ManagementApp() {
   const detailPath = selectedService
     ? `/services/${encodeURIComponent(selectedService.service_name)}`
     : "/services"
+  const resetOriginCommand =
+    commandDiscovery.discovery.commands.find(isResetOriginCommand) ?? null
+  const [resetOriginDrawerOpen, setResetOriginDrawerOpen] = useState(false)
   const refreshing =
     snapshot.refreshing ||
     commandDiscovery.discovery.refreshing ||
@@ -323,80 +333,93 @@ function ManagementApp() {
   )
 
   return (
-    <ManagementShell
-      connectionStatus={<ConnectionBadge state={connectionState} />}
-      detailPath={detailPath}
-      detailsDisabled={services.length === 0}
-      refreshing={refreshing}
-      onRefresh={refreshManagementData}
-    >
-      <div className="flex h-full min-h-0 flex-col overflow-hidden">
-        <Routes>
-          <Route path="/" element={<Navigate replace to="/overview" />} />
-          <Route
-            path="/overview"
-            element={
-              <OverviewTab
-                eventStream={eventStream}
-                chassisStateStream={chassisStateStream}
-                lastLoadedAt={snapshot.lastLoadedAt}
-                services={services}
-                onOpenEvents={() => navigate("/events")}
-                onOpenServices={() => navigate("/services")}
-              />
-            }
+    <>
+      <ManagementShell
+        connectionStatus={<ConnectionBadge state={connectionState} />}
+        detailPath={detailPath}
+        detailsDisabled={services.length === 0}
+        quickCommands={
+          <ResetOriginQuickCommandButton
+            active={resetOriginDrawerOpen}
+            onOpen={() => setResetOriginDrawerOpen(true)}
           />
-          <Route
-            path="/services"
-            element={
-              <ServiceOverview
-                definitionsError={snapshot.definitionsError}
-                error={snapshot.error}
-                filteredServices={filteredServices}
-                filters={filters}
-                loading={snapshot.loading}
-                onRefresh={snapshot.refresh}
-                selectedServiceName={selectedService?.service_name ?? ""}
-                services={services}
-                refreshing={snapshot.refreshing}
-                setFilters={setFilters}
-                onOpenDetails={handleOpenServiceDetails}
-                onSelectService={handleSelectService}
-              />
-            }
-          />
-          <Route
-            path="/services/:serviceName"
-            element={
-              <ServiceDetailsRoute
-                onServiceNotFound={snapshot.refresh}
-                services={services}
-              />
-            }
-          />
-          <Route
-            path="/commands"
-            element={
-              <CommandsPanel
-                discovery={commandDiscovery.discovery}
-                submission={commandDiscovery.submission}
-                onRefresh={commandDiscovery.refresh}
-                onSubmitResetOrigin={commandDiscovery.submitResetOrigin}
-              />
-            }
-          />
-          <Route
-            path="/events"
-            element={<RecentActivityPanel eventStream={eventStream} />}
-          />
-          <Route
-            path="/settings"
-            element={<ConnectionSettings onRefresh={refreshManagementData} />}
-          />
-          <Route path="*" element={<Navigate replace to="/overview" />} />
-        </Routes>
-      </div>
-    </ManagementShell>
+        }
+        refreshing={refreshing}
+        onRefresh={refreshManagementData}
+      >
+        <div className="flex h-full min-h-0 flex-col overflow-hidden">
+          <Routes>
+            <Route path="/" element={<Navigate replace to="/overview" />} />
+            <Route
+              path="/overview"
+              element={
+                <OverviewTab
+                  eventStream={eventStream}
+                  chassisStateStream={chassisStateStream}
+                  lastLoadedAt={snapshot.lastLoadedAt}
+                  services={services}
+                  onOpenEvents={() => navigate("/events")}
+                  onOpenServices={() => navigate("/services")}
+                />
+              }
+            />
+            <Route
+              path="/services"
+              element={
+                <ServiceOverview
+                  definitionsError={snapshot.definitionsError}
+                  error={snapshot.error}
+                  filteredServices={filteredServices}
+                  filters={filters}
+                  loading={snapshot.loading}
+                  onRefresh={snapshot.refresh}
+                  selectedServiceName={selectedService?.service_name ?? ""}
+                  services={services}
+                  refreshing={snapshot.refreshing}
+                  setFilters={setFilters}
+                  onOpenDetails={handleOpenServiceDetails}
+                  onSelectService={handleSelectService}
+                />
+              }
+            />
+            <Route
+              path="/services/:serviceName"
+              element={
+                <ServiceDetailsRoute
+                  onServiceNotFound={snapshot.refresh}
+                  services={services}
+                />
+              }
+            />
+            <Route
+              path="/commands"
+              element={<Navigate replace to="/overview" />}
+            />
+            <Route
+              path="/events"
+              element={<RecentActivityPanel eventStream={eventStream} />}
+            />
+            <Route
+              path="/settings"
+              element={
+                <ConnectionSettings onRefresh={refreshManagementData} />
+              }
+            />
+            <Route path="*" element={<Navigate replace to="/overview" />} />
+          </Routes>
+        </div>
+      </ManagementShell>
+      <ResetOriginDrawer
+        command={resetOriginCommand}
+        discovery={commandDiscovery.discovery}
+        open={resetOriginDrawerOpen}
+        presets={commandDiscovery.resetOriginPresets}
+        submission={commandDiscovery.submission}
+        onClose={() => setResetOriginDrawerOpen(false)}
+        onRefreshPresets={commandDiscovery.refreshPresets}
+        onSubmitResetOrigin={commandDiscovery.submitResetOrigin}
+      />
+    </>
   )
 }
 
@@ -1523,153 +1546,28 @@ function ErrorServicesState({
   )
 }
 
-interface CommandsPanelProps {
-  discovery: CommandDiscoveryState
-  submission: CommandSubmissionState
-  onRefresh: () => void
-  onSubmitResetOrigin: (
-    command: CommandDefinition,
-    payload: ResetOriginPayload,
-    confirm: boolean,
-  ) => Promise<CommandResponse | null>
-}
-
-function CommandsPanel({
-  discovery,
-  submission,
-  onRefresh,
-  onSubmitResetOrigin,
-}: CommandsPanelProps) {
-  const busy = discovery.loading || discovery.refreshing
-
-  return (
-    <section className="flex h-full min-h-0 flex-col overflow-hidden rounded-lg border border-border bg-card shadow-sm">
-      <div className="flex shrink-0 flex-col gap-3 border-b border-border p-4 md:flex-row md:items-center md:justify-between">
-        <div>
-          <h2 className="flex items-center gap-2 text-xl font-semibold tracking-normal text-card-foreground">
-            <DatabaseZap aria-hidden="true" className="size-5" />
-            类型化命令
-          </h2>
-          <p className="mt-1 max-w-3xl truncate text-sm text-muted-foreground">
-            可见命令能力来自 <code>/api/commands</code>；前端只提交已知的类型化载荷。
-          </p>
-        </div>
-        <button
-          type="button"
-          className="inline-flex h-10 w-fit items-center gap-2 rounded-md border border-border bg-card px-3 text-sm font-semibold text-card-foreground hover:bg-muted disabled:cursor-not-allowed disabled:opacity-70"
-          disabled={busy}
-          onClick={onRefresh}
-        >
-          <RefreshCw
-            aria-hidden="true"
-            className={cn("size-4", busy && "animate-spin")}
-          />
-          刷新命令
-        </button>
-      </div>
-
-      {discovery.error ? (
-        <div className="p-5">
-          <PanelError error={discovery.error} />
-        </div>
-      ) : discovery.loading ? (
-        <div className="grid min-h-0 flex-1 place-items-center p-6 text-center">
-          <div>
-            <LoaderCircle
-              aria-hidden="true"
-              className="mx-auto size-8 animate-spin text-primary"
-            />
-            <h3 className="mt-4 text-base font-semibold text-card-foreground">
-              正在加载命令发现结果
-            </h3>
-            <p className="mt-2 text-sm text-muted-foreground">
-              正在读取后端可见命令定义。
-            </p>
-          </div>
-        </div>
-      ) : discovery.commands.length === 0 ? (
-        <div className="grid min-h-0 flex-1 place-items-center p-6 text-center">
-          <div className="max-w-md">
-            <DatabaseZap
-              aria-hidden="true"
-              className="mx-auto size-8 text-primary"
-            />
-            <h3 className="mt-4 text-base font-semibold text-card-foreground">
-              未返回可见命令
-            </h3>
-            <p className="mt-2 text-sm text-muted-foreground">
-              后端已成功响应，但当前没有可供操作员界面展示的命令定义。
-            </p>
-          </div>
-        </div>
-      ) : (
-        <div className="grid min-h-0 flex-1 gap-4 overflow-y-auto p-4 xl:grid-cols-2">
-          {discovery.commands.map((command) => (
-            <CommandCard
-              key={`${command.target}/${command.name}`}
-              command={command}
-              submission={submission}
-              onSubmitResetOrigin={onSubmitResetOrigin}
-            />
-          ))}
-        </div>
-      )}
-    </section>
-  )
-}
-
-function CommandCard({
-  command,
-  submission,
-  onSubmitResetOrigin,
+function ResetOriginQuickCommandButton({
+  active,
+  onOpen,
 }: {
-  command: CommandDefinition
-  submission: CommandSubmissionState
-  onSubmitResetOrigin: (
-    command: CommandDefinition,
-    payload: ResetOriginPayload,
-    confirm: boolean,
-  ) => Promise<CommandResponse | null>
+  active: boolean
+  onOpen: () => void
 }) {
-  const supported = isResetOriginCommand(command)
-
   return (
-    <article className="rounded-lg border border-border bg-card p-4 shadow-sm">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <h3 className="break-words text-base font-semibold text-card-foreground">
-            {command.target}/{command.name}
-          </h3>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {command.description}
-          </p>
-        </div>
-        <RiskPill riskLevel={command.backend.risk_level} />
-      </div>
-
-      <dl className="mt-4 grid grid-cols-2 gap-3 text-sm">
-        <DetailItem label="传输" value={formatTransport(command.node.transport)} />
-        <DetailItem label="Schema" value={command.node.payload_schema} />
-        <DetailItem
-          label="确认"
-          value={formatBoolean(command.backend.requires_confirm)}
-        />
-        <DetailItem label="支持状态" value={supported ? "类型化表单" : "不可用"} />
-      </dl>
-
-      {supported ? (
-        <ResetOriginForm
-          command={command}
-          submission={submission}
-          onSubmitResetOrigin={onSubmitResetOrigin}
-        />
-      ) : (
-        <InlineCommandNotice
-          title="暂不支持的类型化载荷"
-          text="该发现命令可见，但前端尚未提供对应的类型化载荷表单。"
-        />
+    <button
+      type="button"
+      aria-pressed={active}
+      className={cn(
+        "inline-flex h-9 items-center gap-2 rounded-md border px-3 text-sm font-semibold xl:w-full xl:justify-start",
+        active
+          ? "border-primary bg-primary text-primary-foreground"
+          : "border-border bg-card text-card-foreground hover:bg-muted",
       )}
-    </article>
+      onClick={onOpen}
+    >
+      <Crosshair aria-hidden="true" className="size-4" />
+      reset_origin
+    </button>
   )
 }
 
@@ -1989,36 +1887,79 @@ function getEventSummary(event: ManagementEvent): {
   }
 }
 
-function ResetOriginForm({
+function ResetOriginDrawer({
   command,
+  discovery,
+  open,
+  presets,
   submission,
+  onClose,
+  onRefreshPresets,
   onSubmitResetOrigin,
 }: {
-  command: CommandDefinition
+  command: CommandDefinition | null
+  discovery: CommandDiscoveryState
+  open: boolean
+  presets: ResetOriginPresetState
   submission: CommandSubmissionState
+  onClose: () => void
+  onRefreshPresets: () => void
   onSubmitResetOrigin: (
     command: CommandDefinition,
     payload: ResetOriginPayload,
     confirm: boolean,
   ) => Promise<CommandResponse | null>
 }) {
-  const [payload, setPayload] = useState<ResetOriginPayload>({
-    pose_x: 0,
-    pose_y: 0,
-    pose_z: 0,
-    pose_yaw_deg: 0,
-    reason: "",
-  })
+  const [payload, setPayload] = useState<ResetOriginPayload>(() =>
+    readResetOriginSessionPayload(),
+  )
   const [operatorConfirmed, setOperatorConfirmed] = useState(false)
-  const confirmation = getCommandConfirmationState({
-    command,
-    error: submission.error,
-    operatorConfirmed,
-    submitting: submission.submitting,
-  })
+  const confirmation = command
+    ? getCommandConfirmationState({
+        command,
+        error: submission.error,
+        operatorConfirmed,
+        submitting: submission.submitting,
+      })
+    : {
+        canSubmit: false,
+        requiresConfirm: false,
+      }
+
+  useEffect(() => {
+    if (!open) {
+      return
+    }
+
+    setPayload(readResetOriginSessionPayload())
+    setOperatorConfirmed(false)
+  }, [open])
+
+  useEffect(() => {
+    if (!open) {
+      return
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        onClose()
+      }
+    }
+
+    document.addEventListener("keydown", handleKeyDown)
+
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown)
+    }
+  }, [onClose, open])
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+
+    if (!command) {
+      return
+    }
+
     const response = await onSubmitResetOrigin(
       command,
       payload,
@@ -2028,90 +1969,217 @@ function ResetOriginForm({
     if (response) {
       setOperatorConfirmed(false)
     }
+
+    if (response && isSuccessfulCommandResponse(response)) {
+      writeResetOriginSessionPayload(payload)
+    }
   }
 
-  return (
-    <form className="mt-4 space-y-4" onSubmit={handleSubmit}>
-      <div className="grid gap-3 sm:grid-cols-2">
-        <NumberField
-          label="pose_x"
-          value={payload.pose_x}
-          onChange={(pose_x) => setPayload({ ...payload, pose_x })}
-        />
-        <NumberField
-          label="pose_y"
-          value={payload.pose_y}
-          onChange={(pose_y) => setPayload({ ...payload, pose_y })}
-        />
-        <NumberField
-          label="pose_z"
-          value={payload.pose_z}
-          onChange={(pose_z) => setPayload({ ...payload, pose_z })}
-        />
-        <NumberField
-          label="pose_yaw_deg"
-          value={payload.pose_yaw_deg}
-          onChange={(pose_yaw_deg) =>
-            setPayload({ ...payload, pose_yaw_deg })
-          }
-        />
-      </div>
+  if (!open || typeof document === "undefined") {
+    return null
+  }
 
-      <label className="grid gap-2">
-        <span className="text-xs font-semibold uppercase text-muted-foreground">
-          可选原因
-        </span>
-        <textarea
-          className="min-h-20 resize-y rounded-md border border-input bg-card px-3 py-2 text-sm text-card-foreground outline-none transition focus:border-ring focus:ring-2 focus:ring-ring/20"
-          value={payload.reason}
-          onChange={(event) =>
-            setPayload({ ...payload, reason: event.target.value })
-          }
-        />
-      </label>
+  return createPortal(
+    <div className="fixed inset-0 z-50 flex justify-end" role="presentation">
+      <button
+        type="button"
+        aria-label="关闭 reset_origin 抽屉"
+        className="absolute inset-0 bg-black/35"
+        onClick={onClose}
+      />
+      <aside
+        aria-labelledby="reset-origin-drawer-title"
+        aria-modal="true"
+        className="relative z-10 flex h-full w-full max-w-[440px] flex-col border-l border-border bg-card text-card-foreground shadow-2xl"
+        role="dialog"
+      >
+        <div className="flex shrink-0 items-start justify-between gap-3 border-b border-border p-4">
+          <div className="min-w-0">
+            <h2
+              className="flex items-center gap-2 text-lg font-semibold tracking-normal"
+              id="reset-origin-drawer-title"
+            >
+              <Crosshair aria-hidden="true" className="size-5 text-primary" />
+              reset_origin
+            </h2>
+            <p className="mt-1 truncate text-sm text-muted-foreground">
+              {command
+                ? `${command.target}/${command.name}`
+                : discovery.loading || discovery.refreshing
+                  ? "正在读取命令定义"
+                  : "命令未发现"}
+            </p>
+          </div>
+          <button
+            type="button"
+            aria-label="关闭 reset_origin 抽屉"
+            className="inline-flex size-9 shrink-0 items-center justify-center rounded-md border border-border bg-card text-card-foreground hover:bg-muted"
+            onClick={onClose}
+          >
+            <X aria-hidden="true" className="size-4" />
+          </button>
+        </div>
 
-      {confirmation.requiresConfirm ? (
-        <label className="flex items-start gap-3 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-900">
-          <input
-            checked={operatorConfirmed}
-            className="mt-1 size-4"
-            disabled={submission.submitting}
-            type="checkbox"
-            onChange={(event) => setOperatorConfirmed(event.target.checked)}
-          />
-          <span>
-            确认为 <strong>{command.target}</strong>{" "}
-            重置原点。该操作会向后端白名单命令端点发送类型化载荷。
-          </span>
-        </label>
-      ) : null}
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4">
+          {discovery.error ? <PanelError error={discovery.error} /> : null}
 
-      <div className="flex flex-wrap items-center gap-3">
-        <button
-          type="submit"
-          className="inline-flex h-10 items-center gap-2 rounded-md border border-primary bg-primary px-3 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-70"
-          disabled={!confirmation.canSubmit}
-        >
-          {submission.submitting ? (
-            <LoaderCircle
-              aria-hidden="true"
-              className="size-4 animate-spin"
-            />
-          ) : (
-            <Send aria-hidden="true" className="size-4" />
-          )}
-          重置原点
-        </button>
-        <span className="text-xs text-muted-foreground">
-          载荷字段由 reset_origin 类型化表单固定。
-        </span>
-      </div>
+          {!command && !discovery.error ? (
+            <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+              {discovery.loading || discovery.refreshing ? (
+                <span className="inline-flex items-center gap-2">
+                  <LoaderCircle
+                    aria-hidden="true"
+                    className="size-4 animate-spin"
+                  />
+                  正在加载命令发现结果
+                </span>
+              ) : (
+                "后端未返回 lidar_pose_publisher/reset_origin。"
+              )}
+            </div>
+          ) : null}
 
-      {submission.error ? <CommandError error={submission.error} /> : null}
-      {submission.response ? (
-        <CommandResponseSummary response={submission.response} />
-      ) : null}
-    </form>
+          <section className="rounded-md border border-border bg-muted/40 p-3">
+            <div className="flex items-center justify-between gap-3">
+              <h3 className="text-sm font-semibold text-card-foreground">
+                Preset
+              </h3>
+              <button
+                type="button"
+                className="inline-flex h-8 items-center gap-2 rounded-md border border-border bg-card px-2.5 text-xs font-semibold text-card-foreground hover:bg-muted disabled:cursor-not-allowed disabled:opacity-70"
+                disabled={presets.loading || presets.refreshing}
+                onClick={onRefreshPresets}
+              >
+                <RefreshCw
+                  aria-hidden="true"
+                  className={cn(
+                    "size-3.5",
+                    (presets.loading || presets.refreshing) &&
+                      "animate-spin",
+                  )}
+                />
+                刷新
+              </button>
+            </div>
+
+            {presets.error ? <PanelError error={presets.error} /> : null}
+
+            {presets.presets.length > 0 ? (
+              <div className="mt-3 grid gap-2">
+                {presets.presets.map((preset) => (
+                  <button
+                    key={preset.id}
+                    type="button"
+                    className="rounded-md border border-border bg-card px-3 py-2 text-left text-sm hover:bg-muted"
+                    onClick={() =>
+                      setPayload(toResetOriginPresetPayload(preset))
+                    }
+                  >
+                    <span className="block truncate font-semibold text-card-foreground">
+                      {preset.label}
+                    </span>
+                    <span className="mt-1 block truncate text-xs text-muted-foreground">
+                      {formatResetOriginPresetValues(preset)}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            ) : presets.loading ? (
+              <p className="mt-3 inline-flex items-center gap-2 text-sm text-muted-foreground">
+                <LoaderCircle
+                  aria-hidden="true"
+                  className="size-4 animate-spin"
+                />
+                正在加载 preset
+              </p>
+            ) : !presets.error ? (
+              <p className="mt-3 text-sm text-muted-foreground">
+                暂无 reset_origin preset。
+              </p>
+            ) : null}
+          </section>
+
+          <form className="space-y-4" onSubmit={handleSubmit}>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <NumberField
+                label="pose_x"
+                value={payload.pose_x}
+                onChange={(pose_x) => setPayload({ ...payload, pose_x })}
+              />
+              <NumberField
+                label="pose_y"
+                value={payload.pose_y}
+                onChange={(pose_y) => setPayload({ ...payload, pose_y })}
+              />
+              <NumberField
+                label="pose_z"
+                value={payload.pose_z}
+                onChange={(pose_z) => setPayload({ ...payload, pose_z })}
+              />
+              <NumberField
+                label="pose_yaw_deg"
+                value={payload.pose_yaw_deg}
+                onChange={(pose_yaw_deg) =>
+                  setPayload({ ...payload, pose_yaw_deg })
+                }
+              />
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                className="inline-flex h-9 items-center gap-2 rounded-md border border-border bg-card px-3 text-sm font-semibold text-card-foreground hover:bg-muted"
+                onClick={() =>
+                  setPayload({ ...DEFAULT_RESET_ORIGIN_PAYLOAD })
+                }
+              >
+                <RotateCcw aria-hidden="true" className="size-4" />
+                清零
+              </button>
+            </div>
+
+            {command && confirmation.requiresConfirm ? (
+              <label className="flex items-start gap-3 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-900">
+                <input
+                  checked={operatorConfirmed}
+                  className="mt-1 size-4"
+                  disabled={submission.submitting}
+                  type="checkbox"
+                  onChange={(event) =>
+                    setOperatorConfirmed(event.target.checked)
+                  }
+                />
+                <span>
+                  确认为 <strong>{command.target}</strong> 重置原点。
+                </span>
+              </label>
+            ) : null}
+
+            <button
+              type="submit"
+              className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-md border border-primary bg-primary px-3 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-70"
+              disabled={!command || !confirmation.canSubmit}
+            >
+              {submission.submitting ? (
+                <LoaderCircle
+                  aria-hidden="true"
+                  className="size-4 animate-spin"
+                />
+              ) : (
+                <Send aria-hidden="true" className="size-4" />
+              )}
+              重置原点
+            </button>
+
+            {submission.error ? <CommandError error={submission.error} /> : null}
+            {submission.response ? (
+              <CommandResponseSummary response={submission.response} />
+            ) : null}
+          </form>
+        </div>
+      </aside>
+    </div>,
+    document.body,
   )
 }
 
@@ -2120,7 +2188,7 @@ function NumberField({
   value,
   onChange,
 }: {
-  label: keyof Omit<ResetOriginPayload, "reason">
+  label: keyof ResetOriginPayload
   value: number
   onChange: (value: number) => void
 }) {
@@ -2138,6 +2206,36 @@ function NumberField({
       />
     </label>
   )
+}
+
+function toResetOriginPresetPayload(
+  preset: ResetOriginPreset,
+): ResetOriginPayload {
+  return {
+    pose_x: preset.pose_x,
+    pose_y: preset.pose_y,
+    pose_z: preset.pose_z,
+    pose_yaw_deg: preset.pose_yaw_deg,
+  }
+}
+
+function formatResetOriginPresetValues(preset: ResetOriginPreset) {
+  return [
+    `X ${formatResetOriginNumber(preset.pose_x)}`,
+    `Y ${formatResetOriginNumber(preset.pose_y)}`,
+    `Z ${formatResetOriginNumber(preset.pose_z)}`,
+    `Yaw ${formatResetOriginNumber(preset.pose_yaw_deg)}`,
+  ].join(" · ")
+}
+
+function formatResetOriginNumber(value: number) {
+  return Number.isFinite(value)
+    ? value.toLocaleString("zh-CN", { maximumFractionDigits: 3 })
+    : "0"
+}
+
+function isSuccessfulCommandResponse(response: CommandResponse) {
+  return response.accepted && response.result === "success"
 }
 
 function CommandError({ error }: { error: ApiError }) {
@@ -2175,21 +2273,6 @@ function CommandResponseSummary({
         <DetailItem label="消息" value={response.message} />
       </div>
     </dl>
-  )
-}
-
-function InlineCommandNotice({
-  text,
-  title,
-}: {
-  text: string
-  title: string
-}) {
-  return (
-    <div className="mt-4 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-      <p className="font-semibold">{title}</p>
-      <p className="mt-1">{text}</p>
-    </div>
   )
 }
 
@@ -3561,9 +3644,9 @@ function formatEventType(type: string) {
 }
 
 function formatResetOriginFieldLabel(
-  label: keyof Omit<ResetOriginPayload, "reason">,
+  label: keyof ResetOriginPayload,
 ) {
-  const labels: Record<keyof Omit<ResetOriginPayload, "reason">, string> = {
+  const labels: Record<keyof ResetOriginPayload, string> = {
     pose_x: "位姿 X",
     pose_y: "位姿 Y",
     pose_z: "位姿 Z",
@@ -3635,16 +3718,6 @@ function formatEndpointRole(role: string) {
   }
 
   return role
-}
-
-function formatTransport(transport: CommandTransport) {
-  const knownTransportLabels: Record<string, string> = {
-    action: "Action 动作",
-    service: "Service 服务",
-    topic: "Topic 话题",
-  }
-
-  return knownTransportLabels[transport] ?? transport
 }
 
 function formatDisplaySummary(value: string) {

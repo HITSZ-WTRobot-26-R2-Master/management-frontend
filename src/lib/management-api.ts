@@ -14,6 +14,7 @@ import type {
   OverallStatus,
   RestartRequest,
   RestartResponse,
+  ResetOriginPreset,
   RosDiagnosticStatus,
   RosExpectedNode,
   RosStatus,
@@ -205,6 +206,14 @@ export class ManagementApiClient {
 
   listCommands(signal?: AbortSignal) {
     return this.request("/api/commands", isCommandDefinitionArray, { signal })
+  }
+
+  listResetOriginPresets(signal?: AbortSignal) {
+    return this.request(
+      "/api/commands/reset_origin/presets",
+      isResetOriginPresetArray,
+      { signal },
+    )
   }
 
   submitCommand(request: CommandRequest, signal?: AbortSignal) {
@@ -843,6 +852,22 @@ function isCommandResponse(value: unknown): value is CommandResponse {
     isString(value.message) &&
     isString(value.started_at) &&
     isNullableString(value.finished_at)
+  )
+}
+
+function isResetOriginPresetArray(value: unknown): value is ResetOriginPreset[] {
+  return isArrayOf(value, isResetOriginPreset)
+}
+
+function isResetOriginPreset(value: unknown): value is ResetOriginPreset {
+  return (
+    isRecord(value) &&
+    isString(value.id) &&
+    isString(value.label) &&
+    isNumber(value.pose_x) &&
+    isNumber(value.pose_y) &&
+    isNumber(value.pose_z) &&
+    isNumber(value.pose_yaw_deg)
   )
 }
 

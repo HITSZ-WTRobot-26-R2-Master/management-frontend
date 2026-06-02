@@ -338,6 +338,15 @@ export interface CommandResponse {
   finished_at: string | null
 }
 
+export interface ResetOriginPreset {
+  id: string
+  label: string
+  pose_x: number
+  pose_y: number
+  pose_z: number
+  pose_yaw_deg: number
+}
+
 export interface ServiceStatusSnapshotPayload {
   services: ServiceStatus[]
 }
