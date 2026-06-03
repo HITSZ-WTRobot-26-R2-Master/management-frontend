@@ -272,6 +272,33 @@ export interface ChassisStateSnapshot {
   message: ChassisStateMessage | null
 }
 
+export interface RosTime {
+  sec: number
+  nanosec: number
+}
+
+export interface RosHeader {
+  stamp: RosTime
+  frame_id: string
+}
+
+export interface MasterControlPoseMessage {
+  header: RosHeader
+  x: number
+  y: number
+  z: number
+  roll_deg: number
+  pitch_deg: number
+  yaw_deg: number
+}
+
+export interface MasterControlPoseSnapshot {
+  available: boolean
+  topic: string
+  received_at: string | null
+  message: MasterControlPoseMessage | null
+}
+
 export interface ChassisStateSnapshotMessage {
   type: "chassis_state_snapshot"
   time: string
@@ -288,6 +315,23 @@ export interface ChassisStateErrorMessage {
 export type ChassisStateWebSocketMessage =
   | ChassisStateSnapshotMessage
   | ChassisStateErrorMessage
+
+export interface MasterControlPoseSnapshotMessage {
+  type: "master_control_pose_snapshot"
+  time: string
+  snapshot: MasterControlPoseSnapshot
+}
+
+export interface MasterControlPoseErrorMessage {
+  type: "master_control_pose_error"
+  time: string
+  code: ApiErrorCode
+  message: string
+}
+
+export type MasterControlPoseWebSocketMessage =
+  | MasterControlPoseSnapshotMessage
+  | MasterControlPoseErrorMessage
 
 export interface RestartRequest {
   mode: "hard"

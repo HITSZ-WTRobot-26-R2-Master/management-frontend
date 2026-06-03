@@ -10,6 +10,8 @@ import type {
   DockerStatus,
   HealthResponse,
   ManagementEvent,
+  MasterControlPoseSnapshot,
+  MasterControlPoseWebSocketMessage,
   OverallLevel,
   OverallStatus,
   RestartRequest,
@@ -186,6 +188,14 @@ export class ManagementApiClient {
     return this.request("/api/chassis/state", isChassisStateSnapshot, {
       signal,
     })
+  }
+
+  getMasterControlPose(signal?: AbortSignal) {
+    return this.request(
+      "/api/master-control/pose",
+      isMasterControlPoseSnapshot,
+      { signal },
+    )
   }
 
   restartService(
@@ -383,6 +393,17 @@ export function buildChassisStateWebSocketUrl(baseUrl: string, token: string) {
   return buildManagementWebSocketEndpointUrl(
     baseUrl,
     "/ws/chassis/state",
+    token,
+  ).toString()
+}
+
+export function buildMasterControlPoseWebSocketUrl(
+  baseUrl: string,
+  token: string,
+) {
+  return buildManagementWebSocketEndpointUrl(
+    baseUrl,
+    "/ws/master-control/pose",
     token,
   ).toString()
 }
@@ -735,6 +756,18 @@ export function isChassisStateSnapshot(
   )
 }
 
+export function isMasterControlPoseSnapshot(
+  value: unknown,
+): value is MasterControlPoseSnapshot {
+  return (
+    isRecord(value) &&
+    isBoolean(value.available) &&
+    isString(value.topic) &&
+    isNullableString(value.received_at) &&
+    (value.message === null || isMasterControlPoseMessage(value.message))
+  )
+}
+
 function isChassisStateMessage(value: unknown) {
   return (
     isRecord(value) &&
@@ -790,6 +823,31 @@ function isChassisConnectionState(value: unknown) {
   )
 }
 
+function isMasterControlPoseMessage(value: unknown) {
+  return (
+    isRecord(value) &&
+    isRosHeader(value.header) &&
+    isNumber(value.x) &&
+    isNumber(value.y) &&
+    isNumber(value.z) &&
+    isNumber(value.roll_deg) &&
+    isNumber(value.pitch_deg) &&
+    isNumber(value.yaw_deg)
+  )
+}
+
+function isRosHeader(value: unknown) {
+  return (
+    isRecord(value) &&
+    isRosTime(value.stamp) &&
+    isString(value.frame_id)
+  )
+}
+
+function isRosTime(value: unknown) {
+  return isRecord(value) && isNumber(value.sec) && isNumber(value.nanosec)
+}
+
 export function isChassisStateWebSocketMessage(
   value: unknown,
 ): value is ChassisStateWebSocketMessage {
@@ -803,6 +861,24 @@ export function isChassisStateWebSocketMessage(
 
   return (
     value.type === "chassis_state_error" &&
+    isString(value.code) &&
+    isString(value.message)
+  )
+}
+
+export function isMasterControlPoseWebSocketMessage(
+  value: unknown,
+): value is MasterControlPoseWebSocketMessage {
+  if (!isRecord(value) || !isString(value.type) || !isString(value.time)) {
+    return false
+  }
+
+  if (value.type === "master_control_pose_snapshot") {
+    return isMasterControlPoseSnapshot(value.snapshot)
+  }
+
+  return (
+    value.type === "master_control_pose_error" &&
     isString(value.code) &&
     isString(value.message)
   )

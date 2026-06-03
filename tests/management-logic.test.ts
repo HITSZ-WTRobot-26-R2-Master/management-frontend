@@ -12,9 +12,12 @@ import {
   buildManagementHttpUrl,
   buildManagementWebSocketUrl,
   buildChassisStateWebSocketUrl,
+  buildMasterControlPoseWebSocketUrl,
   buildServiceLogWebSocketUrl,
   isChassisStateSnapshot,
   isChassisStateWebSocketMessage,
+  isMasterControlPoseSnapshot,
+  isMasterControlPoseWebSocketMessage,
   isAbortError,
   isServiceStatus,
   isValidManagementBaseUrl,
@@ -288,6 +291,30 @@ describe("management API URL helpers", () => {
     }
   })
 
+  test("builds master-control pose WebSocket URLs with query token auth", () => {
+    const previousLocation = globalThis.location
+
+    Object.defineProperty(globalThis, "location", {
+      configurable: true,
+      value: {
+        origin: "http://127.0.0.1:5173",
+      },
+    })
+
+    try {
+      expect(
+        buildMasterControlPoseWebSocketUrl("/management-api", "change-me"),
+      ).toBe(
+        "ws://127.0.0.1:5173/management-api/ws/master-control/pose?token=change-me",
+      )
+    } finally {
+      Object.defineProperty(globalThis, "location", {
+        configurable: true,
+        value: previousLocation,
+      })
+    }
+  })
+
   test("preserves the existing events WebSocket helper behavior", () => {
     expect(
       buildManagementWebSocketUrl("http://127.0.0.1:8080", "change-me"),
@@ -352,6 +379,59 @@ describe("chassis state API contract", () => {
       isChassisStateWebSocketMessage({
         type: "chassis_state_snapshot",
         time: "2026-06-02T02:30:00Z",
+        snapshot: { available: true },
+      }),
+    ).toBe(false)
+  })
+})
+
+describe("master-control pose API contract", () => {
+  test("validates complete master-control pose snapshots", () => {
+    expect(isMasterControlPoseSnapshot(masterControlPoseSnapshot())).toBe(true)
+    expect(
+      isMasterControlPoseSnapshot({
+        available: false,
+        topic: "to_master_control",
+        received_at: null,
+        message: null,
+      }),
+    ).toBe(true)
+  })
+
+  test("rejects malformed master-control pose snapshots", () => {
+    const snapshot = masterControlPoseSnapshot()
+
+    expect(
+      isMasterControlPoseSnapshot({
+        ...snapshot,
+        message: {
+          ...snapshot.message,
+          yaw_deg: "90",
+        },
+      }),
+    ).toBe(false)
+  })
+
+  test("validates master-control pose websocket messages", () => {
+    expect(
+      isMasterControlPoseWebSocketMessage({
+        type: "master_control_pose_snapshot",
+        time: "2026-06-03T02:30:00Z",
+        snapshot: masterControlPoseSnapshot(),
+      }),
+    ).toBe(true)
+    expect(
+      isMasterControlPoseWebSocketMessage({
+        type: "master_control_pose_error",
+        time: "2026-06-03T02:30:00Z",
+        code: "request_failed",
+        message: "agent unavailable",
+      }),
+    ).toBe(true)
+    expect(
+      isMasterControlPoseWebSocketMessage({
+        type: "master_control_pose_snapshot",
+        time: "2026-06-03T02:30:00Z",
         snapshot: { available: true },
       }),
     ).toBe(false)
@@ -1065,6 +1145,29 @@ function chassisStateSnapshot() {
         upper_host_localization: true,
         upper_host: false,
       },
+    },
+  }
+}
+
+function masterControlPoseSnapshot() {
+  return {
+    available: true,
+    topic: "to_master_control",
+    received_at: "2026-06-03T02:30:00Z",
+    message: {
+      header: {
+        stamp: {
+          sec: 123,
+          nanosec: 456000000,
+        },
+        frame_id: "map",
+      },
+      x: 1.25,
+      y: -2.5,
+      z: 0.75,
+      roll_deg: 0,
+      pitch_deg: 0,
+      yaw_deg: 90,
     },
   }
 }

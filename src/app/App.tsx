@@ -66,7 +66,9 @@ import {
 } from "@/components/ui/dialog"
 import { ManagementShell } from "@/components/management/ManagementShell"
 import { ChassisStateCard } from "@/components/management/ChassisStateCard"
+import { MasterControlPoseCard } from "@/components/management/MasterControlPoseCard"
 import { useChassisStateStream } from "@/hooks/useChassisStateStream"
+import { useMasterControlPoseStream } from "@/hooks/useMasterControlPoseStream"
 import {
   type CommandDiscoveryState,
   type CommandSubmissionState,
@@ -268,16 +270,25 @@ function ManagementApp() {
   const commandDiscovery = useCommandDiscovery()
   const eventStream = useEventStream()
   const chassisStateStream = useChassisStateStream()
+  const masterControlPoseStream = useMasterControlPoseStream()
   const refreshSnapshot = snapshot.refresh
   const refreshCommands = commandDiscovery.refresh
   const refreshRecent = eventStream.refreshRecent
   const refreshChassisState = chassisStateStream.refresh
+  const refreshMasterControlPose = masterControlPoseStream.refresh
   const refreshManagementData = useCallback(() => {
     refreshSnapshot()
     refreshCommands()
     refreshRecent()
     refreshChassisState()
-  }, [refreshChassisState, refreshCommands, refreshRecent, refreshSnapshot])
+    refreshMasterControlPose()
+  }, [
+    refreshChassisState,
+    refreshCommands,
+    refreshMasterControlPose,
+    refreshRecent,
+    refreshSnapshot,
+  ])
   const [filters, setFilters] = useState<ServiceFilterState>({
     status: allFilterValue,
     category: allFilterValue,
@@ -337,6 +348,7 @@ function ManagementApp() {
                   eventStream={eventStream}
                   chassisStateStream={chassisStateStream}
                   lastLoadedAt={snapshot.lastLoadedAt}
+                  masterControlPoseStream={masterControlPoseStream}
                   services={services}
                   onOpenEvents={() => navigate("/events")}
                   onOpenServices={() => navigate("/services")}
@@ -666,6 +678,7 @@ function OverviewTab({
   chassisStateStream,
   eventStream,
   lastLoadedAt,
+  masterControlPoseStream,
   services,
   onOpenEvents,
   onOpenServices,
@@ -673,6 +686,7 @@ function OverviewTab({
   chassisStateStream: ReturnType<typeof useChassisStateStream>
   eventStream: ReturnType<typeof useEventStream>
   lastLoadedAt: string | null
+  masterControlPoseStream: ReturnType<typeof useMasterControlPoseStream>
   services: ServiceStatus[]
   onOpenEvents: () => void
   onOpenServices: () => void
@@ -690,7 +704,10 @@ function OverviewTab({
         services={services}
         onOpenServices={onOpenServices}
       />
-      <ChassisStateCard stream={chassisStateStream} />
+      <div className="grid min-h-0 gap-3 xl:grid-cols-2">
+        <ChassisStateCard stream={chassisStateStream} />
+        <MasterControlPoseCard stream={masterControlPoseStream} />
+      </div>
       <div className="grid min-h-0 flex-1">
         <OverviewEventsSummary
           eventStream={eventStream}
