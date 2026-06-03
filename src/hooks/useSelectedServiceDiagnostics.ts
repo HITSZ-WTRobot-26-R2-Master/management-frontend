@@ -122,6 +122,7 @@ const initialLogsState = {
 export function useSelectedServiceDiagnostics(
   serviceName: string | null,
   logOptions: ServiceLogOptions,
+  logsEnabled: boolean,
   onServiceNotFound: () => void,
 ): SelectedServiceDiagnosticsState {
   const baseUrl = useAtomValue(baseUrlAtom)
@@ -256,6 +257,7 @@ export function useSelectedServiceDiagnostics(
         !detail.refreshing
         ? "detail"
         : null,
+      logsEnabled &&
       logs.error?.code === "request_failed" && !logs.loading && !logs.refreshing
         ? "logs"
         : null,
@@ -308,6 +310,7 @@ export function useSelectedServiceDiagnostics(
     logs.loadedAt,
     logs.loading,
     logs.refreshing,
+    logsEnabled,
     serviceName,
     stats.error?.code,
     stats.loadedAt,
@@ -402,6 +405,11 @@ export function useSelectedServiceDiagnostics(
   ])
 
   useEffect(() => {
+    if (!logsEnabled) {
+      setLogs(initialLogsState)
+      return
+    }
+
     if (!serviceName) {
       setLogs(initialLogsState)
       return
@@ -629,6 +637,7 @@ export function useSelectedServiceDiagnostics(
     logOptions.stdout,
     logOptions.tail,
     logOptions.timestamps,
+    logsEnabled,
     logsRefreshIndex,
     serviceName,
     hasToken,
