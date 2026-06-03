@@ -14,6 +14,8 @@ import type {
   ApiError,
   MasterControlPoseMessage,
   MasterControlPoseSnapshot,
+  OdinOdometryPoseMessage,
+  PoseSourceSnapshot,
 } from "@/types/management"
 
 const staleThresholdMs = 1_500
@@ -37,7 +39,9 @@ export function MasterControlPoseCard({
       summarizeMasterControlPose(stream.snapshot, stream.error, stream.status),
     [stream.error, stream.snapshot, stream.status],
   )
-  const message = stream.snapshot?.message ?? null
+  const lidarPose = stream.snapshot?.lidar_pose ?? null
+  const odinOdometry = stream.snapshot?.odin_odometry ?? null
+  const hasPose = Boolean(lidarPose?.message || odinOdometry?.message)
 
   return (
     <section className="flex min-h-0 flex-col rounded-lg border border-border bg-card shadow-sm">
@@ -70,38 +74,31 @@ export function MasterControlPoseCard({
           </span>
         </div>
 
-        {message ? (
-          <>
-            <div className="mt-3 grid gap-3 md:grid-cols-2">
-              <SummaryMetric
-                icon={MapPinned}
-                label="位置"
-                value={`${formatNumber(message.x)} / ${formatNumber(message.y)}`}
-                detail={`Z ${formatNumber(message.z)}`}
-              />
-              <SummaryMetric
+        {hasPose ? (
+          <div className="mt-2 grid gap-2 sm:grid-cols-2">
+            {odinOdometry ? (
+              <PoseSourceBlock
                 icon={Compass}
-                label="坐标系"
-                value={message.header.frame_id || "未设置"}
-                detail={formatRosStamp(message)}
+                label="Odin odometry"
+                source={odinOdometry}
+                frameLabel={
+                  odinOdometry.message?.child_frame_id || "odin_baselink 未设置"
+                }
+                frameDetail={odinOdometry.message?.header.frame_id || "odom 未设置"}
               />
-            </div>
-
-            <div className="mt-3 grid gap-2 sm:grid-cols-3">
-              <CompactField
-                label="Roll"
-                value={`${formatNumber(message.roll_deg)} deg`}
+            ) : null}
+            {lidarPose ? (
+              <PoseSourceBlock
+                icon={MapPinned}
+                label="Lidar pose publisher"
+                source={lidarPose}
+                frameLabel={
+                  lidarPose.message?.header.frame_id || "ideal_world 未设置"
+                }
+                frameDetail={lidarPose.topic}
               />
-              <CompactField
-                label="Pitch"
-                value={`${formatNumber(message.pitch_deg)} deg`}
-              />
-              <CompactField
-                label="Yaw"
-                value={`${formatNumber(message.yaw_deg)} deg`}
-              />
-            </div>
-          </>
+            ) : null}
+          </div>
         ) : (
           <div className="mt-4 rounded-md border border-dashed border-border bg-muted/40 px-4 py-5 text-sm text-muted-foreground">
             {summary.emptyText}
@@ -134,38 +131,56 @@ function StatePill({
   )
 }
 
-function SummaryMetric({
-  detail,
+type PoseMessage = MasterControlPoseMessage | OdinOdometryPoseMessage
+
+function PoseSourceBlock({
+  frameDetail,
+  frameLabel,
   icon: Icon,
   label,
-  value,
+  source,
 }: {
-  detail: string
+  frameDetail: string
+  frameLabel: string
   icon: LucideIcon
   label: string
-  value: string
+  source: PoseSourceSnapshot<PoseMessage>
 }) {
-  return (
-    <div className="min-w-0 rounded-md border border-border bg-muted/45 p-2.5">
-      <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-        <Icon aria-hidden="true" className="size-4 text-primary" />
-        {label}
-      </div>
-      <p className="mt-1.5 truncate text-base font-semibold tracking-normal text-card-foreground">
-        {value}
-      </p>
-      <p className="mt-1 truncate text-xs text-muted-foreground">{detail}</p>
-    </div>
-  )
-}
+  const message = source.message
 
-function CompactField({ label, value }: { label: string; value: string }) {
   return (
-    <div className="min-w-0 rounded-md border border-border bg-card px-2.5 py-1.5">
-      <p className="truncate text-xs text-muted-foreground">{label}</p>
-      <p className="mt-1 truncate text-sm font-semibold text-card-foreground">
-        {value}
-      </p>
+    <div className="min-w-0 rounded-md border border-border bg-muted/45 px-2.5 py-2">
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <p className="truncate text-xs font-medium text-muted-foreground">
+            {label}
+          </p>
+          <p className="mt-0.5 truncate text-sm font-semibold text-card-foreground">
+            {frameLabel}
+          </p>
+        </div>
+        <Icon aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-primary" />
+      </div>
+
+      {message ? (
+        <>
+          <p className="mt-1.5 truncate font-mono text-sm font-semibold tracking-normal text-card-foreground">
+            X {formatNumber(message.x)} / Y {formatNumber(message.y)} / Z{" "}
+            {formatNumber(message.z)}
+          </p>
+          <p className="mt-1 truncate text-xs text-muted-foreground">
+            R {formatNumber(message.roll_deg)} / P{" "}
+            {formatNumber(message.pitch_deg)} / Y {formatNumber(message.yaw_deg)} deg
+          </p>
+          <p className="mt-1 truncate text-xs text-muted-foreground">
+            {frameDetail} · {formatRosStamp(message)}
+          </p>
+        </>
+      ) : (
+        <p className="mt-2 truncate text-sm text-muted-foreground">
+          等待 {source.topic}
+        </p>
+      )}
     </div>
   )
 }
@@ -197,33 +212,62 @@ function summarizeMasterControlPose(
     }
   }
 
-  if (!snapshot || !snapshot.available || !snapshot.message) {
+  if (!snapshot || (!snapshot.lidar_pose.message && !snapshot.odin_odometry.message)) {
     return {
       detail: snapshot?.topic ? `topic ${snapshot.topic}` : "等待首帧",
-      emptyText: "management agent 尚未收到 to_master_control 消息。",
+      emptyText: "management agent 尚未收到 Odin odometry 或 lidar pose 消息。",
       icon: CircleHelp,
       label: status === "connecting" ? "连接中" : "无消息",
-      subtitle: "等待 pose_node 输出",
+      subtitle: "等待 odin_ros_driver / pose_node 输出",
       tone: "neutral" as const,
     }
   }
 
-  const ageMs = ageFromIso(snapshot.received_at)
+  const receivedAt = latestPoseReceivedAt(snapshot)
+  const ageMs = ageFromIso(receivedAt)
   const stale = ageMs !== null && ageMs > staleThresholdMs
 
   return {
-    detail: snapshot.received_at
-      ? `${formatTimestamp(snapshot.received_at)}，${formatAge(ageMs)}`
+    detail: receivedAt
+      ? `${formatTimestamp(receivedAt)}，${formatAge(ageMs)}`
       : "收到消息但缺少时间戳",
     emptyText: "",
     icon: stale ? AlertTriangle : CheckCircle2,
     label: stale ? "位姿过期" : status === "fallback" ? "REST 回退" : "实时位姿",
-    subtitle: `${snapshot.topic} / ${snapshot.message.header.frame_id || "frame 未设置"}`,
+    subtitle: poseFrameSummary(snapshot),
     tone: stale ? ("warning" as const) : ("success" as const),
   }
 }
 
-function formatRosStamp(message: MasterControlPoseMessage) {
+function poseFrameSummary(snapshot: MasterControlPoseSnapshot) {
+  const odinFrame =
+    snapshot.odin_odometry.message?.child_frame_id || "odin_baselink"
+  const lidarFrame = snapshot.lidar_pose.message?.header.frame_id || "ideal_world"
+
+  return `${odinFrame} / ${lidarFrame}`
+}
+
+function latestPoseReceivedAt(snapshot: MasterControlPoseSnapshot) {
+  const receivedAtValues = [
+    snapshot.lidar_pose.message ? snapshot.lidar_pose.received_at : null,
+    snapshot.odin_odometry.message ? snapshot.odin_odometry.received_at : null,
+    snapshot.received_at,
+  ].filter((value): value is string => Boolean(value))
+  let latestValue: string | null = null
+  let latestTime = Number.NEGATIVE_INFINITY
+
+  for (const value of receivedAtValues) {
+    const time = Date.parse(value)
+    if (Number.isFinite(time) && time > latestTime) {
+      latestValue = value
+      latestTime = time
+    }
+  }
+
+  return latestValue ?? receivedAtValues[0] ?? null
+}
+
+function formatRosStamp(message: PoseMessage) {
   return `ROS ${message.header.stamp.sec}.${String(
     message.header.stamp.nanosec,
   ).padStart(9, "0")}`

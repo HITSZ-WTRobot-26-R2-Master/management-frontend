@@ -704,7 +704,7 @@ function OverviewTab({
         services={services}
         onOpenServices={onOpenServices}
       />
-      <div className="grid min-h-0 gap-3 xl:grid-cols-2">
+      <div className="grid min-h-0 gap-3 lg:grid-cols-2">
         <ChassisStateCard stream={chassisStateStream} />
         <MasterControlPoseCard stream={masterControlPoseStream} />
       </div>

@@ -393,7 +393,18 @@ describe("master-control pose API contract", () => {
         available: false,
         topic: "to_master_control",
         received_at: null,
-        message: null,
+        lidar_pose: {
+          available: false,
+          topic: "to_master_control",
+          received_at: null,
+          message: null,
+        },
+        odin_odometry: {
+          available: false,
+          topic: "/odin1/odometry",
+          received_at: null,
+          message: null,
+        },
       }),
     ).toBe(true)
   })
@@ -404,9 +415,12 @@ describe("master-control pose API contract", () => {
     expect(
       isMasterControlPoseSnapshot({
         ...snapshot,
-        message: {
-          ...snapshot.message,
-          yaw_deg: "90",
+        lidar_pose: {
+          ...snapshot.lidar_pose,
+          message: {
+            ...snapshot.lidar_pose.message,
+            yaw_deg: "90",
+          },
         },
       }),
     ).toBe(false)
@@ -1153,21 +1167,47 @@ function masterControlPoseSnapshot() {
   return {
     available: true,
     topic: "to_master_control",
-    received_at: "2026-06-03T02:30:00Z",
-    message: {
-      header: {
-        stamp: {
-          sec: 123,
-          nanosec: 456000000,
+    received_at: "2026-06-03T02:30:01Z",
+    lidar_pose: {
+      available: true,
+      topic: "to_master_control",
+      received_at: "2026-06-03T02:30:00Z",
+      message: {
+        header: {
+          stamp: {
+            sec: 123,
+            nanosec: 456000000,
+          },
+          frame_id: "ideal_world",
         },
-        frame_id: "map",
+        x: 1.25,
+        y: -2.5,
+        z: 0.75,
+        roll_deg: 0,
+        pitch_deg: 0,
+        yaw_deg: 90,
       },
-      x: 1.25,
-      y: -2.5,
-      z: 0.75,
-      roll_deg: 0,
-      pitch_deg: 0,
-      yaw_deg: 90,
+    },
+    odin_odometry: {
+      available: true,
+      topic: "/odin1/odometry",
+      received_at: "2026-06-03T02:30:01Z",
+      message: {
+        header: {
+          stamp: {
+            sec: 124,
+            nanosec: 789000000,
+          },
+          frame_id: "odom",
+        },
+        child_frame_id: "odin1_base_link",
+        x: 3.5,
+        y: -4.25,
+        z: 0.5,
+        roll_deg: 0,
+        pitch_deg: 0,
+        yaw_deg: 180,
+      },
     },
   }
 }

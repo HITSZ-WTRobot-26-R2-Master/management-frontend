@@ -10,10 +10,13 @@ import type {
   DockerStatus,
   HealthResponse,
   ManagementEvent,
+  MasterControlPoseMessage,
   MasterControlPoseSnapshot,
   MasterControlPoseWebSocketMessage,
+  OdinOdometryPoseMessage,
   OverallLevel,
   OverallStatus,
+  PoseSourceSnapshot,
   RestartRequest,
   RestartResponse,
   ResetOriginPreset,
@@ -764,7 +767,21 @@ export function isMasterControlPoseSnapshot(
     isBoolean(value.available) &&
     isString(value.topic) &&
     isNullableString(value.received_at) &&
-    (value.message === null || isMasterControlPoseMessage(value.message))
+    isPoseSourceSnapshot(value.lidar_pose, isMasterControlPoseMessage) &&
+    isPoseSourceSnapshot(value.odin_odometry, isOdinOdometryPoseMessage)
+  )
+}
+
+function isPoseSourceSnapshot<TMessage>(
+  value: unknown,
+  isMessage: (message: unknown) => message is TMessage,
+): value is PoseSourceSnapshot<TMessage> {
+  return (
+    isRecord(value) &&
+    isBoolean(value.available) &&
+    isString(value.topic) &&
+    isNullableString(value.received_at) &&
+    (value.message === null || isMessage(value.message))
   )
 }
 
@@ -823,10 +840,28 @@ function isChassisConnectionState(value: unknown) {
   )
 }
 
-function isMasterControlPoseMessage(value: unknown) {
+function isMasterControlPoseMessage(
+  value: unknown,
+): value is MasterControlPoseMessage {
   return (
     isRecord(value) &&
     isRosHeader(value.header) &&
+    isNumber(value.x) &&
+    isNumber(value.y) &&
+    isNumber(value.z) &&
+    isNumber(value.roll_deg) &&
+    isNumber(value.pitch_deg) &&
+    isNumber(value.yaw_deg)
+  )
+}
+
+function isOdinOdometryPoseMessage(
+  value: unknown,
+): value is OdinOdometryPoseMessage {
+  return (
+    isRecord(value) &&
+    isRosHeader(value.header) &&
+    isString(value.child_frame_id) &&
     isNumber(value.x) &&
     isNumber(value.y) &&
     isNumber(value.z) &&

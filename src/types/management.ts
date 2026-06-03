@@ -292,11 +292,30 @@ export interface MasterControlPoseMessage {
   yaw_deg: number
 }
 
+export interface OdinOdometryPoseMessage {
+  header: RosHeader
+  child_frame_id: string
+  x: number
+  y: number
+  z: number
+  roll_deg: number
+  pitch_deg: number
+  yaw_deg: number
+}
+
+export interface PoseSourceSnapshot<TMessage> {
+  available: boolean
+  topic: string
+  received_at: string | null
+  message: TMessage | null
+}
+
 export interface MasterControlPoseSnapshot {
   available: boolean
   topic: string
   received_at: string | null
-  message: MasterControlPoseMessage | null
+  lidar_pose: PoseSourceSnapshot<MasterControlPoseMessage>
+  odin_odometry: PoseSourceSnapshot<OdinOdometryPoseMessage>
 }
 
 export interface ChassisStateSnapshotMessage {
