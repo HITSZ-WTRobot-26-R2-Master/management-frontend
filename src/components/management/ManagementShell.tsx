@@ -53,20 +53,20 @@ export function ManagementShell({
     <div className="flex h-[100dvh] min-h-0 overflow-hidden">
       <div className="flex min-h-0 flex-1 flex-col">
         <header className="shrink-0 border-b border-border bg-card/95 backdrop-blur">
-          <div className="mx-auto flex max-w-[1600px] flex-col gap-3 px-5 py-3 xl:flex-row xl:items-center xl:justify-between">
+          <div className="mx-auto flex max-w-[1600px] flex-col gap-2 px-3 py-2 lg:flex-row lg:items-center lg:justify-between">
             <div className="min-w-0">
               <p className="text-sm font-semibold uppercase tracking-normal text-primary">
                 R2 管理平台
               </p>
-              <p className="mt-0.5 text-sm text-muted-foreground">
+              <p className="mt-0.5 text-xs text-muted-foreground">
                 面向已注册 ROS2 服务的运维控制台
               </p>
             </div>
-            <div className="flex flex-wrap items-center gap-2 xl:justify-end">
+            <div className="flex flex-wrap items-center gap-2 lg:justify-end">
               {connectionStatus}
               <button
                 type="button"
-                className="inline-flex h-9 items-center gap-2 rounded-md border border-border bg-card px-3 text-sm font-semibold text-card-foreground hover:bg-muted disabled:cursor-not-allowed disabled:opacity-70"
+                className="inline-flex h-8 items-center gap-2 rounded-md border border-border bg-card px-2.5 text-sm font-semibold text-card-foreground hover:bg-muted disabled:cursor-not-allowed disabled:opacity-70"
                 disabled={refreshing}
                 onClick={onRefresh}
               >
@@ -80,15 +80,15 @@ export function ManagementShell({
           </div>
         </header>
 
-        <div className="mx-auto flex min-h-0 w-full max-w-[1600px] flex-1 flex-col gap-3 px-5 py-4 xl:flex-row">
+        <div className="mx-auto flex min-h-0 w-full max-w-[1600px] flex-1 flex-col gap-3 px-3 py-3 lg:flex-row">
           <main className="min-h-0 min-w-0 flex-1 overflow-hidden">
             {children}
           </main>
-          <aside className="order-first shrink-0 overflow-x-auto xl:order-none xl:w-40 xl:overflow-visible">
-            <div className="flex w-max gap-2 xl:w-full xl:flex-col">
+          <aside className="order-first shrink-0 overflow-x-auto lg:order-none lg:w-36 lg:overflow-visible">
+            <div className="flex w-max gap-2 lg:w-full lg:flex-col">
               <nav
                 aria-label="管理导航"
-                className="flex gap-2 xl:w-full xl:flex-col"
+                className="flex gap-2 lg:w-full lg:flex-col"
                 role="tablist"
               >
                 {navItems.map((item) => {
@@ -107,7 +107,7 @@ export function ManagementShell({
                         const active = isActive && !disabled
 
                         return cn(
-                          "inline-flex h-9 items-center gap-2 rounded-md border px-3 text-sm font-medium xl:w-full xl:justify-start",
+                          "inline-flex h-8 items-center gap-2 rounded-md border px-2.5 text-sm font-medium lg:w-full lg:justify-start",
                           active
                             ? "border-primary bg-primary text-primary-foreground"
                             : "border-border bg-card text-muted-foreground hover:bg-muted hover:text-card-foreground",
@@ -125,7 +125,7 @@ export function ManagementShell({
               {quickCommands ? (
                 <div
                   aria-label="快捷命令"
-                  className="flex gap-2 border-l border-border pl-2 xl:w-full xl:flex-col xl:border-l-0 xl:border-t xl:pl-0 xl:pt-3"
+                  className="flex gap-2 border-l border-border pl-2 lg:w-full lg:flex-col lg:border-l-0 lg:border-t lg:pl-0 lg:pt-3"
                 >
                   {quickCommands}
                 </div>

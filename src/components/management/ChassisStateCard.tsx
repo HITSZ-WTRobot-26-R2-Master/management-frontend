@@ -70,7 +70,7 @@ export function ChassisStateCard({
   return (
     <>
       <section className="flex min-h-0 flex-col rounded-lg border border-border bg-card shadow-sm">
-        <div className="flex items-center justify-between gap-3 border-b border-border p-4">
+        <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
           <div className="min-w-0">
             <h2 className="text-base font-semibold text-card-foreground">
               底盘状态
@@ -82,7 +82,7 @@ export function ChassisStateCard({
           <div className="flex shrink-0 items-center gap-2">
             <button
               type="button"
-              className="inline-flex h-9 items-center gap-2 rounded-md border border-border bg-card px-3 text-sm font-semibold text-card-foreground hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
+              className="inline-flex h-8 items-center gap-2 rounded-md border border-border bg-card px-2.5 text-sm font-semibold text-card-foreground hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
               disabled={!message}
               onClick={() => setDetailsOpen(true)}
             >
@@ -90,7 +90,7 @@ export function ChassisStateCard({
             </button>
             <button
               type="button"
-              className="inline-flex h-9 items-center gap-2 rounded-md border border-border bg-card px-3 text-sm font-semibold text-card-foreground hover:bg-muted"
+              className="inline-flex h-8 items-center gap-2 rounded-md border border-border bg-card px-2.5 text-sm font-semibold text-card-foreground hover:bg-muted"
               onClick={stream.refresh}
             >
               <RefreshCw aria-hidden="true" className="size-4" />
@@ -99,7 +99,7 @@ export function ChassisStateCard({
           </div>
         </div>
 
-        <div className="min-h-0 overflow-y-auto p-4">
+        <div className="min-h-0 overflow-y-auto p-3">
           <div className="flex flex-wrap items-center gap-2">
             <StatePill tone={summary.tone} icon={summary.icon}>
               {summary.label}
@@ -111,7 +111,7 @@ export function ChassisStateCard({
 
           {message ? (
             <>
-              <div className="mt-4 grid gap-3 md:grid-cols-3">
+              <div className="mt-3 grid gap-3 md:grid-cols-3">
                 <SummaryMetric
                   icon={Route}
                   label="位置"
@@ -136,7 +136,7 @@ export function ChassisStateCard({
                 />
               </div>
 
-              <div className="mt-4 grid gap-3 lg:grid-cols-4">
+              <div className="mt-3 grid gap-2 lg:grid-cols-4">
                 <CompactField label="底盘模式" value={message.action.chassis_mode} />
                 <CompactField label="路径状态" value={message.action.step_status} />
                 <CompactField label="升降状态" value={message.action.lift_status} />
@@ -210,12 +210,12 @@ function SummaryMetric({
   value: string
 }) {
   return (
-    <div className="min-w-0 rounded-md border border-border bg-muted/45 p-3">
+    <div className="min-w-0 rounded-md border border-border bg-muted/45 p-2.5">
       <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
         <Icon aria-hidden="true" className="size-4 text-primary" />
         {label}
       </div>
-      <p className="mt-2 truncate text-lg font-semibold tracking-normal text-card-foreground">
+      <p className="mt-1.5 truncate text-base font-semibold tracking-normal text-card-foreground">
         {value}
       </p>
       <p className="mt-1 truncate text-xs text-muted-foreground">{detail}</p>
@@ -231,7 +231,7 @@ function CompactField({
   value: boolean | number | string
 }) {
   return (
-    <div className="min-w-0 rounded-md border border-border bg-card px-3 py-2">
+    <div className="min-w-0 rounded-md border border-border bg-card px-2.5 py-1.5">
       <p className="truncate text-xs text-muted-foreground">{label}</p>
       <p className="mt-1 truncate text-sm font-semibold text-card-foreground">
         {String(value)}

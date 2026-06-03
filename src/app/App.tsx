@@ -516,8 +516,8 @@ function ConnectionSettings({ onRefresh }: { onRefresh: () => void }) {
 
   return (
     <section className="flex h-full min-h-0 flex-col overflow-hidden rounded-lg border border-border bg-card shadow-sm">
-      <div className="shrink-0 border-b border-border p-4">
-        <h1 className="text-xl font-semibold tracking-normal text-card-foreground">
+      <div className="shrink-0 border-b border-border px-4 py-3">
+        <h1 className="text-lg font-semibold tracking-normal text-card-foreground">
           连接设置
         </h1>
         <p className="mt-1 max-w-3xl truncate text-sm text-muted-foreground">
@@ -525,7 +525,7 @@ function ConnectionSettings({ onRefresh }: { onRefresh: () => void }) {
         </p>
       </div>
       <form
-        className="grid shrink-0 gap-5 p-5 lg:grid-cols-[minmax(280px,1fr)_minmax(240px,320px)_auto]"
+        className="grid shrink-0 gap-3 p-4 lg:grid-cols-[minmax(280px,1fr)_minmax(240px,320px)_auto]"
         onSubmit={handleSubmit}
       >
         <label className="grid gap-2">
@@ -534,7 +534,7 @@ function ConnectionSettings({ onRefresh }: { onRefresh: () => void }) {
             后端基础 URL
           </span>
           <input
-            className="h-10 rounded-md border border-input bg-card px-3 text-sm text-card-foreground outline-none transition focus:border-ring focus:ring-2 focus:ring-ring/20"
+            className="h-9 rounded-md border border-input bg-card px-3 text-sm text-card-foreground outline-none transition focus:border-ring focus:ring-2 focus:ring-ring/20"
             value={baseUrlDraft}
             onChange={(event) => setBaseUrlDraft(event.target.value)}
             spellCheck={false}
@@ -549,7 +549,7 @@ function ConnectionSettings({ onRefresh }: { onRefresh: () => void }) {
             Bearer 令牌
           </span>
           <input
-            className="h-10 rounded-md border border-input bg-card px-3 text-sm text-card-foreground outline-none transition focus:border-ring focus:ring-2 focus:ring-ring/20"
+            className="h-9 rounded-md border border-input bg-card px-3 text-sm text-card-foreground outline-none transition focus:border-ring focus:ring-2 focus:ring-ring/20"
             value={tokenDraft}
             onChange={(event) => setTokenDraft(event.target.value)}
             type="password"
@@ -560,7 +560,7 @@ function ConnectionSettings({ onRefresh }: { onRefresh: () => void }) {
         <div className="flex flex-wrap items-end gap-2">
           <button
             type="submit"
-            className="inline-flex h-10 items-center gap-2 rounded-md border border-primary bg-primary px-3 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-70"
+            className="inline-flex h-9 items-center gap-2 rounded-md border border-primary bg-primary px-3 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-70"
             disabled={connectionState.status === "checking"}
           >
             {connectionState.status === "checking" ? (
@@ -575,7 +575,7 @@ function ConnectionSettings({ onRefresh }: { onRefresh: () => void }) {
           </button>
           <button
             type="button"
-            className="inline-flex h-10 items-center gap-2 rounded-md border border-border bg-card px-3 text-sm font-semibold text-muted-foreground hover:bg-muted hover:text-card-foreground"
+            className="inline-flex h-9 items-center gap-2 rounded-md border border-border bg-card px-3 text-sm font-semibold text-muted-foreground hover:bg-muted hover:text-card-foreground"
             onClick={handleClearToken}
             disabled={!hasToken && tokenDraft.length === 0}
           >
@@ -585,7 +585,7 @@ function ConnectionSettings({ onRefresh }: { onRefresh: () => void }) {
         </div>
       </form>
 
-      <div className="flex shrink-0 flex-col gap-3 border-t border-border px-5 py-4 md:flex-row md:items-center md:justify-between">
+      <div className="flex shrink-0 flex-col gap-2 border-t border-border px-4 py-3 md:flex-row md:items-center md:justify-between">
         <ConnectionBadge state={connectionState} />
         <p className="text-sm text-muted-foreground">
           HTTP 请求使用 Authorization Bearer 头；浏览器 WebSocket 连接使用
@@ -602,8 +602,8 @@ function ConnectionErrorNotice({ error }: { error: ApiError }) {
   const Icon = copy.icon
 
   return (
-    <div className="border-t border-border px-5 py-4">
-      <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900">
+    <div className="border-t border-border px-4 py-3">
+      <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-900">
         <div className="flex items-start gap-3">
           <Icon
             aria-hidden="true"
@@ -674,7 +674,7 @@ function OverviewTab({
   )
 
   return (
-    <section className="flex h-full min-h-0 flex-col gap-4 overflow-hidden">
+    <section className="flex h-full min-h-0 flex-col gap-3 overflow-hidden">
       <HeaderSummary
         abnormalServices={abnormalServices}
         eventStream={eventStream}
@@ -1037,7 +1037,7 @@ function HeaderSummary({
 
   return (
     <>
-      <div className="grid shrink-0 gap-3 md:grid-cols-2 xl:grid-cols-5">
+      <div className="grid shrink-0 gap-3 md:grid-cols-2 lg:grid-cols-5">
         <MetricTile
           icon={Server}
           label="托管服务"
@@ -1139,7 +1139,7 @@ function MetricTile({
   value,
 }: MetricTileProps) {
   const className = cn(
-    "rounded-lg border border-border bg-card p-3 shadow-sm",
+    "rounded-lg border border-border bg-card p-2.5 shadow-sm",
     onClick &&
       "w-full text-left transition hover:border-primary/50 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 active:scale-[0.99]",
     isActive && "border-primary ring-2 ring-primary/20",
@@ -1149,15 +1149,15 @@ function MetricTile({
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-sm font-medium text-muted-foreground">{label}</p>
-          <p className="mt-1 truncate text-2xl font-semibold tracking-normal text-card-foreground">
+          <p className="mt-1 truncate text-xl font-semibold tracking-normal text-card-foreground">
             {value}
           </p>
         </div>
-        <span className="rounded-md border border-border bg-secondary p-2 text-secondary-foreground">
+        <span className="rounded-md border border-border bg-secondary p-1.5 text-secondary-foreground">
           <Icon aria-hidden="true" className="size-4" />
         </span>
       </div>
-      <p className="mt-2 line-clamp-2 text-sm text-muted-foreground">
+      <p className="mt-1.5 line-clamp-2 text-xs text-muted-foreground">
         {detail}
       </p>
     </>
@@ -1219,9 +1219,9 @@ function ServiceOverview({
 
   return (
     <section className="flex h-full min-h-0 flex-col overflow-hidden rounded-lg border border-border bg-card shadow-sm">
-      <div className="flex shrink-0 flex-col gap-3 border-b border-border p-4 md:flex-row md:items-center md:justify-between">
+      <div className="flex shrink-0 flex-col gap-2 border-b border-border px-4 py-3 md:flex-row md:items-center md:justify-between">
         <div>
-          <h1 className="text-xl font-semibold tracking-normal text-card-foreground">
+          <h1 className="text-lg font-semibold tracking-normal text-card-foreground">
             服务列表
           </h1>
           <p className="mt-1 max-w-3xl truncate text-sm text-muted-foreground">
@@ -1332,7 +1332,7 @@ function ServiceFilterBar({
   onUpdate,
 }: ServiceFiltersProps) {
   return (
-    <div className="grid shrink-0 gap-3 border-b border-border p-3 lg:grid-cols-[1fr_auto] lg:items-end">
+    <div className="grid shrink-0 gap-2 border-b border-border p-3 lg:grid-cols-[1fr_auto] lg:items-end">
       <div className="grid gap-3 sm:grid-cols-2">
         <FilterSelect
           disabled={disabled}
@@ -1369,7 +1369,7 @@ function ServiceFilterBar({
         </span>
         <button
           type="button"
-          className="inline-flex h-10 items-center gap-2 rounded-md border border-border bg-card px-3 text-sm font-semibold text-card-foreground hover:bg-muted disabled:cursor-not-allowed disabled:opacity-70"
+          className="inline-flex h-9 items-center gap-2 rounded-md border border-border bg-card px-3 text-sm font-semibold text-card-foreground hover:bg-muted disabled:cursor-not-allowed disabled:opacity-70"
           onClick={onRefresh}
           disabled={refreshing}
         >
@@ -1514,7 +1514,7 @@ function ResetOriginQuickCommandButton({
       type="button"
       aria-pressed={active}
       className={cn(
-        "inline-flex h-9 items-center gap-2 rounded-md border px-3 text-sm font-semibold xl:w-full xl:justify-start",
+        "inline-flex h-8 items-center gap-2 rounded-md border px-2.5 text-sm font-semibold lg:w-full lg:justify-start",
         active
           ? "border-primary bg-primary text-primary-foreground"
           : "border-border bg-card text-card-foreground hover:bg-muted",
@@ -1538,9 +1538,9 @@ function RecentActivityPanel({
 
   return (
     <section className="flex h-full min-h-0 flex-col overflow-hidden rounded-lg border border-border bg-card shadow-sm">
-      <div className="flex shrink-0 flex-col gap-3 border-b border-border p-4 md:flex-row md:items-center md:justify-between">
+      <div className="flex shrink-0 flex-col gap-2 border-b border-border px-4 py-3 md:flex-row md:items-center md:justify-between">
         <div>
-          <h2 className="flex items-center gap-2 text-xl font-semibold tracking-normal text-card-foreground">
+          <h2 className="flex items-center gap-2 text-lg font-semibold tracking-normal text-card-foreground">
             <ListRestart aria-hidden="true" className="size-5" />
             最近活动
           </h2>
@@ -1560,7 +1560,7 @@ function RecentActivityPanel({
         </div>
       </div>
 
-      <div className="grid shrink-0 gap-3 border-b border-border p-3 md:grid-cols-3">
+      <div className="grid shrink-0 gap-3 border-b border-border p-2.5 md:grid-cols-3">
         <ActivityMeta
           icon={Activity}
           label="最近事件"
@@ -1642,7 +1642,7 @@ function ActivityMeta({
   value: string
 }) {
   return (
-    <div className="rounded-md border border-border bg-muted/60 p-3">
+    <div className="rounded-md border border-border bg-muted/60 p-2.5">
       <div className="flex items-center gap-2 text-xs font-semibold uppercase text-muted-foreground">
         <Icon aria-hidden="true" className="size-4" />
         {label}
@@ -1667,8 +1667,8 @@ function ActivityEventItem({
   return (
     <li
       className={cn(
-        "grid gap-3 p-4 sm:grid-cols-[auto_1fr_auto] sm:items-start",
-        compact && "p-3",
+        "grid gap-3 p-3 sm:grid-cols-[auto_1fr_auto] sm:items-start",
+        compact && "p-2.5",
       )}
     >
       <span
@@ -2258,7 +2258,7 @@ function ServiceRow({
         selected ? "bg-sky-50/70" : "bg-card hover:bg-muted/60",
       )}
     >
-      <td className="px-4 py-3">
+      <td className="px-4 py-2.5">
         <button
           type="button"
           className="flex w-full min-w-0 flex-col text-left"
@@ -2276,7 +2276,7 @@ function ServiceRow({
           </span>
         </button>
       </td>
-      <td className="px-4 py-3">
+      <td className="px-4 py-2.5">
         <StatusPill level={service.overall.level}>
           <OverallIcon aria-hidden="true" className="size-3.5" />
           {formatOverallLevel(service.overall.level)}
@@ -2285,7 +2285,7 @@ function ServiceRow({
           {formatDisplaySummary(service.overall.reason)}
         </p>
       </td>
-      <td className="px-4 py-3">
+      <td className="px-4 py-2.5">
         <div className="flex min-w-0 items-center gap-2">
           <Container
             aria-hidden="true"
@@ -2303,7 +2303,7 @@ function ServiceRow({
           重启 {formatRestartCount(service.docker.restart_count)}
         </p>
       </td>
-      <td className="px-4 py-3">
+      <td className="px-4 py-2.5">
         <div className="flex min-w-0 items-center gap-2">
           {service.ros.agent_available ? (
             <Wifi
@@ -2328,7 +2328,7 @@ function ServiceRow({
           个话题
         </p>
       </td>
-      <td className="px-4 py-3 text-right">
+      <td className="px-4 py-2.5 text-right">
         <button
           type="button"
           className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-card px-2 text-xs font-semibold text-card-foreground hover:bg-muted"
@@ -2350,7 +2350,7 @@ function SelectedServiceSummary({
   onOpenDetails?: () => void
 }) {
   return (
-    <div className="flex shrink-0 items-center justify-between gap-3 border-t border-border bg-muted/40 px-4 py-3">
+    <div className="flex shrink-0 items-center justify-between gap-3 border-t border-border bg-muted/40 px-3 py-2">
       <div className="min-w-0">
         {service ? (
           <>
@@ -2374,7 +2374,7 @@ function SelectedServiceSummary({
       </div>
       <button
         type="button"
-        className="inline-flex h-9 shrink-0 items-center gap-2 rounded-md border border-primary bg-primary px-3 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
+        className="inline-flex h-8 shrink-0 items-center gap-2 rounded-md border border-primary bg-primary px-2.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
         disabled={!service || !onOpenDetails}
         onClick={onOpenDetails}
       >
@@ -2512,17 +2512,17 @@ function ServiceInspector({
   }, [statsBusy, statsLoadObserved, statsRequestBaseline])
 
   return (
-    <div className="grid h-full min-h-0 gap-4 xl:grid-cols-[minmax(0,1fr)_240px]">
+    <div className="grid h-full min-h-0 gap-3 lg:grid-cols-[minmax(0,1fr)_220px]">
       <aside className="flex h-full min-h-0 flex-col overflow-hidden rounded-lg border border-border bg-card shadow-sm">
-        <section className="shrink-0 border-b border-border p-4">
+        <section className="shrink-0 border-b border-border p-3">
           {detailService ? (
             <>
-              <div className="flex flex-wrap items-start justify-between gap-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="min-w-0">
                   <p className="text-sm font-medium text-muted-foreground">
                     当前服务
                   </p>
-                  <h2 className="mt-1 truncate text-2xl font-semibold tracking-normal text-card-foreground">
+                  <h2 className="mt-1 truncate text-xl font-semibold tracking-normal text-card-foreground">
                     {detailService.display_name}
                   </h2>
                   <p className="mt-1 truncate text-xs text-muted-foreground">
@@ -2537,7 +2537,7 @@ function ServiceInspector({
                   </StatusPill>
                   <button
                     type="button"
-                    className="inline-flex h-9 items-center gap-2 rounded-md border border-border bg-card px-3 text-sm font-semibold text-card-foreground hover:bg-muted disabled:cursor-not-allowed disabled:opacity-70"
+                    className="inline-flex h-8 items-center gap-2 rounded-md border border-border bg-card px-2.5 text-xs font-semibold text-card-foreground hover:bg-muted disabled:cursor-not-allowed disabled:opacity-70"
                     onClick={diagnostics.refreshDetail}
                     disabled={detailBusy}
                   >
@@ -2550,7 +2550,7 @@ function ServiceInspector({
                   <button
                     type="button"
                     className={cn(
-                      "inline-flex h-9 items-center gap-2 rounded-md border px-3 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-70",
+                      "inline-flex h-8 items-center gap-2 rounded-md border px-2.5 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-70",
                       statsPopoverOpen || statsButtonBusy
                         ? "border-primary bg-primary text-primary-foreground hover:bg-primary/90"
                         : "border-border bg-card text-card-foreground hover:bg-muted",
@@ -2574,7 +2574,7 @@ function ServiceInspector({
                   </button>
                   <button
                     type="button"
-                    className="inline-flex h-9 items-center gap-2 rounded-md border border-red-700 bg-red-700 px-3 text-sm font-semibold text-white hover:bg-red-800 disabled:cursor-not-allowed disabled:opacity-70"
+                    className="inline-flex h-8 items-center gap-2 rounded-md border border-red-700 bg-red-700 px-2.5 text-xs font-semibold text-white hover:bg-red-800 disabled:cursor-not-allowed disabled:opacity-70"
                     disabled={!detailService || diagnostics.restart.submitting}
                     onClick={() => void diagnostics.restartHard("")}
                   >
@@ -2591,7 +2591,7 @@ function ServiceInspector({
                 </div>
               </div>
 
-              <p className="mt-3 text-xs text-muted-foreground">
+              <p className="mt-2 text-xs text-muted-foreground">
                 {diagnostics.detail.loadedAt
                   ? `详情已加载 ${formatTimestamp(diagnostics.detail.loadedAt)}`
                   : "详情会从当前选中的逻辑服务加载"}
@@ -2612,7 +2612,7 @@ function ServiceInspector({
               <p className="text-sm font-medium text-muted-foreground">
                 当前服务
               </p>
-              <h2 className="mt-1 text-2xl font-semibold tracking-normal text-card-foreground">
+              <h2 className="mt-1 text-xl font-semibold tracking-normal text-card-foreground">
                 等待快照
               </h2>
               <p className="mt-3 text-sm text-muted-foreground">
@@ -2624,7 +2624,7 @@ function ServiceInspector({
           )}
         </section>
 
-        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4">
+        <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-3">
           <LogsPanel
             logs={diagnostics.logs}
             options={logOptions}
@@ -2682,7 +2682,7 @@ function ServiceContainerSwitcher({
       </div>
 
       {services.length > 0 ? (
-        <div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-3">
+        <div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-2.5">
           {services.map((service) => {
             const active = service.service_name === currentServiceName
             const OverallIcon = overallIcons[service.overall.level]
@@ -2693,7 +2693,7 @@ function ServiceContainerSwitcher({
                 type="button"
                 aria-pressed={active}
                 className={cn(
-                  "flex w-full min-w-0 flex-col rounded-md border p-3 text-left text-sm transition",
+                  "flex w-full min-w-0 flex-col rounded-md border p-2.5 text-left text-sm transition",
                   active
                     ? "border-primary bg-primary text-primary-foreground"
                     : "border-border bg-card text-card-foreground hover:bg-muted",
@@ -3035,11 +3035,24 @@ function StatusSummaryPopover({
     const margin = 16
     const rect = trigger.getBoundingClientRect()
     const viewportWidth = window.innerWidth
+    const viewportHeight = window.innerHeight
     const width = Math.max(280, Math.min(420, viewportWidth - margin * 2))
     const maxLeft = Math.max(margin, viewportWidth - width - margin)
     const left = Math.min(Math.max(rect.right - width, margin), maxLeft)
-    const maxHeight = Number.POSITIVE_INFINITY
-    const top = Math.max(margin, rect.bottom + gap)
+    const availableBelow = viewportHeight - rect.bottom - gap - margin
+    const availableAbove = rect.top - gap - margin
+    const placeAbove = availableBelow < 180 && availableAbove > availableBelow
+    const availableHeight = Math.max(
+      120,
+      placeAbove ? availableAbove : availableBelow,
+    )
+    const maxHeight = Math.min(420, availableHeight)
+    const top = placeAbove
+      ? Math.max(margin, rect.top - gap - maxHeight)
+      : Math.max(
+          margin,
+          Math.min(rect.bottom + gap, viewportHeight - maxHeight - margin),
+        )
 
     setPosition({ left, maxHeight, top, width })
   }, [triggerRef])
@@ -3102,6 +3115,7 @@ function StatusSummaryPopover({
   const Icon = copy.icon
   const style: CSSProperties = {
     left: position.left,
+    maxHeight: position.maxHeight,
     top: position.top,
     width: position.width,
   }
@@ -3110,7 +3124,7 @@ function StatusSummaryPopover({
     <div
       aria-labelledby={`${popoverId}-title`}
       aria-modal="false"
-      className="fixed z-50 rounded-lg border border-border bg-popover text-popover-foreground shadow-2xl ring-1 ring-black/5"
+      className="fixed z-50 flex flex-col overflow-hidden rounded-lg border border-border bg-popover text-popover-foreground shadow-2xl ring-1 ring-black/5"
       id={popoverId}
       ref={popoverRef}
       role="dialog"
@@ -3139,7 +3153,7 @@ function StatusSummaryPopover({
         </button>
       </div>
 
-      <dl className="grid grid-cols-2 gap-2 p-4 text-sm">
+      <dl className="grid min-h-0 grid-cols-2 gap-2 overflow-y-auto p-4 text-sm">
         {copy.items.map((item) => (
           <div
             key={item.label}
