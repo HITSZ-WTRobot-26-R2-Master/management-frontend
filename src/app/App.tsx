@@ -1,6 +1,7 @@
 import {
   Activity,
   AlertTriangle,
+  ArrowDownToLine,
   Boxes,
   CheckCircle2,
   CircleHelp,
@@ -3414,6 +3415,17 @@ function LogsPanel({
     setAutoFollow(isScrolledNearBottom(viewport))
   }, [])
 
+  const handleEnableFollow = useCallback(() => {
+    setAutoFollow(true)
+
+    const viewport = logViewportRef.current
+    if (!viewport) {
+      return
+    }
+
+    viewport.scrollTop = viewport.scrollHeight
+  }, [])
+
   return (
     <section className="rounded-lg border border-border bg-card p-5 shadow-sm">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -3453,77 +3465,89 @@ function LogsPanel({
             {streamReason ? `，${streamReason}` : ""}
           </span>
         </div>
-        <div className="relative">
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <div className="relative">
+            <button
+              type="button"
+              className="inline-flex h-9 items-center gap-2 rounded-md border border-border bg-card px-3 text-sm font-semibold text-card-foreground hover:bg-muted disabled:cursor-not-allowed disabled:opacity-70"
+              disabled={!service || busy}
+              onClick={() => setConfigOpen((current) => !current)}
+              aria-expanded={configOpen}
+            >
+              <ListFilter aria-hidden="true" className="size-4" />
+              日志配置
+            </button>
+            {configOpen ? (
+              <div className="absolute right-0 z-20 mt-2 w-72 rounded-md border border-border bg-card p-3 text-sm shadow-lg">
+                <label className="grid gap-2">
+                  <span className="text-xs font-semibold uppercase text-muted-foreground">
+                    尾部行数
+                  </span>
+                  <input
+                    className="h-10 rounded-md border border-input bg-card px-3 text-sm text-card-foreground outline-none transition focus:border-ring focus:ring-2 focus:ring-ring/20 disabled:cursor-not-allowed disabled:opacity-60"
+                    disabled={!service || busy}
+                    max={1000}
+                    min={1}
+                    type="number"
+                    value={options.tail}
+                    onChange={(event) =>
+                      onUpdateOptions({
+                        ...options,
+                        tail: clampLogTail(Number(event.target.value)),
+                      })
+                    }
+                  />
+                </label>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <ToggleCheckbox
+                    checked={options.stdout}
+                    disabled={!service || busy}
+                    label="stdout"
+                    onChange={(stdout) =>
+                      onUpdateOptions({ ...options, stdout })
+                    }
+                  />
+                  <ToggleCheckbox
+                    checked={options.stderr}
+                    disabled={!service || busy}
+                    label="stderr"
+                    onChange={(stderr) =>
+                      onUpdateOptions({ ...options, stderr })
+                    }
+                  />
+                  <ToggleCheckbox
+                    checked={options.timestamps}
+                    disabled={!service || busy}
+                    label="时间戳"
+                    onChange={(timestamps) =>
+                      onUpdateOptions({ ...options, timestamps })
+                    }
+                  />
+                </div>
+              </div>
+            ) : null}
+          </div>
           <button
             type="button"
             className="inline-flex h-9 items-center gap-2 rounded-md border border-border bg-card px-3 text-sm font-semibold text-card-foreground hover:bg-muted disabled:cursor-not-allowed disabled:opacity-70"
             disabled={!service || busy}
-            onClick={() => setConfigOpen((current) => !current)}
-            aria-expanded={configOpen}
+            onClick={onRefresh}
           >
-            <ListFilter aria-hidden="true" className="size-4" />
-            日志配置
+            <RefreshCw
+              aria-hidden="true"
+              className={cn("size-4", busy && "animate-spin")}
+            />
+            重新连接
           </button>
-          {configOpen ? (
-            <div className="absolute right-0 z-20 mt-2 w-72 rounded-md border border-border bg-card p-3 text-sm shadow-lg">
-              <label className="grid gap-2">
-                <span className="text-xs font-semibold uppercase text-muted-foreground">
-                  尾部行数
-                </span>
-                <input
-                  className="h-10 rounded-md border border-input bg-card px-3 text-sm text-card-foreground outline-none transition focus:border-ring focus:ring-2 focus:ring-ring/20 disabled:cursor-not-allowed disabled:opacity-60"
-                  disabled={!service || busy}
-                  max={1000}
-                  min={1}
-                  type="number"
-                  value={options.tail}
-                  onChange={(event) =>
-                    onUpdateOptions({
-                      ...options,
-                      tail: clampLogTail(Number(event.target.value)),
-                    })
-                  }
-                />
-              </label>
-              <div className="mt-3 flex flex-wrap gap-2">
-                <ToggleCheckbox
-                  checked={options.stdout}
-                  disabled={!service || busy}
-                  label="stdout"
-                  onChange={(stdout) => onUpdateOptions({ ...options, stdout })}
-                />
-                <ToggleCheckbox
-                  checked={options.stderr}
-                  disabled={!service || busy}
-                  label="stderr"
-                  onChange={(stderr) => onUpdateOptions({ ...options, stderr })}
-                />
-                <ToggleCheckbox
-                  checked={options.timestamps}
-                  disabled={!service || busy}
-                  label="时间戳"
-                  onChange={(timestamps) =>
-                    onUpdateOptions({ ...options, timestamps })
-                  }
-                />
-              </div>
-              <button
-                type="button"
-                className="mt-3 inline-flex h-9 w-full items-center justify-center gap-2 rounded-md border border-border bg-card px-3 text-sm font-semibold text-card-foreground hover:bg-muted disabled:cursor-not-allowed disabled:opacity-70"
-                disabled={!service || busy}
-                onClick={() => {
-                  setConfigOpen(false)
-                  onRefresh()
-                }}
-              >
-                <RefreshCw
-                  aria-hidden="true"
-                  className={cn("size-4", busy && "animate-spin")}
-                />
-                重新连接
-              </button>
-            </div>
-          ) : null}
+          <button
+            type="button"
+            className="inline-flex h-9 items-center gap-2 rounded-md border border-border bg-card px-3 text-sm font-semibold text-card-foreground hover:bg-muted disabled:cursor-not-allowed disabled:opacity-70"
+            disabled={!service || autoFollow}
+            onClick={handleEnableFollow}
+          >
+            <ArrowDownToLine aria-hidden="true" className="size-4" />
+            开启跟随
+          </button>
         </div>
       </div>
 
