@@ -39,6 +39,7 @@ import {
   formatRosSummary,
   getToneForOverallLevel,
 } from "../src/lib/status-presentation"
+import { getServiceDiagnosticGroups } from "../src/lib/service-diagnostics"
 import type {
   CommandDefinition,
   ManagementEvent,
@@ -563,6 +564,168 @@ describe("status presentation", () => {
     expect(formatRosSummary(service)).toBe(
       "未知, 代理不可用: Docker 正在运行；ROS 代理不可用",
     )
+  })
+})
+
+describe("service diagnostics", () => {
+  test("groups multiple Odin ROS diagnostics by hardware id without dropping entry fields", () => {
+    const service = makeServiceStatus({
+      docker: {
+        exit_code: 0,
+        running: true,
+        state: "running",
+        status: "UP",
+      },
+      overall: {
+        level: "error",
+        reason: "ros_error",
+      },
+      ros: {
+        diagnostics: [
+          {
+            hardware_id: "odin",
+            level: "warning",
+            message: "dtof stream delayed",
+            name: "odin/dtof",
+          },
+          {
+            hardware_id: "odin",
+            level: "error",
+            message: "image stream timeout",
+            name: "odin/image",
+          },
+        ],
+        level: "error",
+        summary: "diagnostics_error",
+      },
+      service_name: "odin_ros_driver",
+    })
+
+    const odinGroup = getServiceDiagnosticGroups(service).find(
+      (group) => group.key === "ros:diagnostics:odin",
+    )
+
+    expect(odinGroup).toMatchObject({
+      count: 2,
+      label: "ROS 诊断 / odin",
+      level: "error",
+      source: "odin",
+      summaryEntry: {
+        detail: "image stream timeout",
+        hardwareId: "odin",
+        key: "ros:diagnostic:odin/image:odin:1",
+        kind: "ros-diagnostic",
+        label: "ROS 诊断 / odin",
+        level: "error",
+        title: "odin/image",
+      },
+      title: "odin",
+    })
+    expect(odinGroup?.entries).toEqual([
+      {
+        detail: "dtof stream delayed",
+        hardwareId: "odin",
+        key: "ros:diagnostic:odin/dtof:odin:0",
+        kind: "ros-diagnostic",
+        label: "ROS 诊断 / odin",
+        level: "warning",
+        title: "odin/dtof",
+      },
+      {
+        detail: "image stream timeout",
+        hardwareId: "odin",
+        key: "ros:diagnostic:odin/image:odin:1",
+        kind: "ros-diagnostic",
+        label: "ROS 诊断 / odin",
+        level: "error",
+        title: "odin/image",
+      },
+    ])
+  })
+
+  test("groups diagnostics with empty hardware id under a stable ROS source", () => {
+    const service = makeServiceStatus({
+      docker: {
+        exit_code: 0,
+        running: true,
+        state: "running",
+        status: "UP",
+      },
+      overall: {
+        level: "warning",
+        reason: "ros_warning",
+      },
+      ros: {
+        diagnostics: [
+          {
+            hardware_id: "",
+            level: "unknown",
+            message: "diagnostic source did not report hardware id",
+            name: "anonymous diagnostic",
+          },
+        ],
+        level: "warning",
+        summary: "diagnostics_warning",
+      },
+    })
+
+    const group = getServiceDiagnosticGroups(service).find(
+      (item) => item.key === "ros:diagnostics:ROS 诊断",
+    )
+
+    expect(group).toMatchObject({
+      count: 1,
+      label: "ROS 诊断",
+      level: "warning",
+      source: "ROS 诊断",
+      title: "ROS 诊断",
+    })
+    expect(group?.entries[0]).toMatchObject({
+      detail: "diagnostic source did not report hardware id",
+      hardwareId: "",
+      kind: "ros-diagnostic",
+      label: "ROS 诊断",
+      level: "warning",
+      title: "anonymous diagnostic",
+    })
+  })
+
+  test("keeps non-ROS diagnostic groups for docker nodes and topics", () => {
+    const service = makeServiceStatus({
+      docker: {
+        exists: false,
+        running: false,
+        state: "missing",
+      },
+      ros: {
+        expected_nodes: [
+          {
+            last_seen: null,
+            name: "odin_ros_driver",
+            present: false,
+          },
+        ],
+        topics: [
+          {
+            freshness: null,
+            name: "/odin1/cloud_raw",
+            observed_types: [],
+            present: false,
+            publisher_count: 0,
+            required_endpoint: "publisher",
+            resolved_name: "/odin1/cloud_raw",
+            subscriber_count: 0,
+            type_name: "sensor_msgs/msg/PointCloud2",
+          },
+        ],
+      },
+    })
+
+    const keys = getServiceDiagnosticGroups(service).map((group) => group.key)
+
+    expect(keys).toContain("docker:missing")
+    expect(keys).toContain("ros:node:odin_ros_driver")
+    expect(keys).toContain("ros:topic:/odin1/cloud_raw:/odin1/cloud_raw")
   })
 })
 

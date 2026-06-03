@@ -50,6 +50,12 @@ import {
   useNavigate,
   useParams,
 } from "react-router-dom"
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion"
 import { ManagementShell } from "@/components/management/ManagementShell"
 import { ChassisStateCard } from "@/components/management/ChassisStateCard"
 import { useChassisStateStream } from "@/hooks/useChassisStateStream"
@@ -126,6 +132,10 @@ import {
   getToneForOverallLevel,
   type StatusTone,
 } from "@/lib/status-presentation"
+import {
+  getServiceDiagnosticGroups,
+  type ServiceDiagnosticGroup,
+} from "@/lib/service-diagnostics"
 import { cn } from "@/lib/utils"
 
 type StatusFilter = OverallLevel | "all"
@@ -2776,7 +2786,7 @@ function CombinedStatusPanel({
   const statusPopoverId = useId()
   const docker = service?.docker
   const ros = service?.ros
-  const diagnosticItems = service ? getServiceDiagnosticItems(service) : []
+  const diagnosticGroups = service ? getServiceDiagnosticGroups(service) : []
   const presentExpectedNodes = ros?.expected_nodes.filter((node) => node.present) ?? []
   const observedTopics = ros?.topics.filter((topic) => topic.present) ?? []
   const canOpenStatusPopover = Boolean(service && docker && ros)
@@ -2909,28 +2919,16 @@ function CombinedStatusPanel({
             </RosListPanel>
 
             <RosListPanel title="诊断">
-              {diagnosticItems.length > 0 ? (
-                diagnosticItems.map((diagnostic) => (
-                  <div
-                    key={diagnostic.key}
-                    className="rounded-md border border-border bg-muted/60 p-3 text-sm"
-                  >
-                    <div className="flex min-w-0 items-center justify-between gap-3">
-                      <span className="truncate font-medium text-card-foreground">
-                        {diagnostic.title}
-                      </span>
-                      <StatusPill level={diagnostic.level}>
-                        {formatOverallLevel(diagnostic.level)}
-                      </StatusPill>
-                    </div>
-                    <p className="mt-1 truncate text-xs font-medium text-muted-foreground">
-                      {diagnostic.label}
-                    </p>
-                    <p className="mt-2 text-xs text-muted-foreground">
-                      {diagnostic.detail}
-                    </p>
-                  </div>
-                ))
+              {diagnosticGroups.length > 0 ? (
+                <Accordion
+                  className="space-y-1.5"
+                  collapsible
+                  type="single"
+                >
+                  {diagnosticGroups.map((group) => (
+                    <DiagnosticGroupItem key={group.key} group={group} />
+                  ))}
+                </Accordion>
               ) : (
                 <EmptyPanelText text="该服务当前没有警告或错误诊断。" />
               )}
@@ -2964,14 +2962,6 @@ interface StatusPopoverCopy {
   detail: string
   icon: LucideIcon
   items: StatusPopoverItem[]
-  title: string
-}
-
-interface ServiceDiagnosticItem {
-  detail: string
-  key: string
-  label: string
-  level: OverallLevel
   title: string
 }
 
@@ -3256,139 +3246,80 @@ function getStatusPopoverCopy(
   }
 }
 
-function getServiceDiagnosticItems(
-  service: ServiceStatus,
-): ServiceDiagnosticItem[] {
-  const items: ServiceDiagnosticItem[] = []
-  const docker = service.docker
-  const ros = service.ros
+function DiagnosticGroupItem({ group }: { group: ServiceDiagnosticGroup }) {
+  const summary = group.summaryEntry
 
-  if (service.overall.level !== "ok") {
-    items.push({
-      detail: formatDisplaySummary(service.overall.reason),
-      key: "overall",
-      label: "总体状态",
-      level: normalizeDiagnosticLevel(service.overall.level),
-      title: "总体异常",
-    })
-  }
+  return (
+    <AccordionItem
+      className="rounded-md border border-border bg-muted/60 px-2.5"
+      value={group.key}
+    >
+      <AccordionTrigger className="py-2 hover:no-underline">
+        <div className="flex min-w-0 flex-1 items-start gap-2 text-left">
+          <div className="min-w-0 flex-1">
+            <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+              <span className="min-w-0 truncate font-medium text-card-foreground">
+                {group.title}
+              </span>
+              <span className="shrink-0 text-xs font-medium text-muted-foreground">
+                {group.count} 项
+              </span>
+            </div>
+            <p className="mt-1 line-clamp-1 text-xs font-normal text-muted-foreground">
+              {summary.title}：{summary.detail}
+            </p>
+          </div>
+          <CompactStatusPill level={group.level}>
+            {formatOverallLevel(group.level)}
+          </CompactStatusPill>
+        </div>
+      </AccordionTrigger>
 
-  if (!docker.exists) {
-    items.push({
-      detail: "Docker 容器未存在于当前后端快照。",
-      key: "docker:missing",
-      label: "Docker",
-      level: "error",
-      title: "容器缺失",
-    })
-  } else if (!docker.running || docker.state !== "running") {
-    items.push({
-      detail: `${formatDockerState(docker.state)}，运行=${formatBoolean(
-        docker.running,
-      )}${docker.status ? `，状态 ${docker.status}` : ""}`,
-      key: "docker:state",
-      label: "Docker",
-      level: docker.running ? "warning" : "error",
-      title: "运行状态异常",
-    })
-  }
-
-  if (docker.exit_code !== null && docker.exit_code !== 0) {
-    items.push({
-      detail: `容器退出码 ${docker.exit_code}。`,
-      key: "docker:exit-code",
-      label: "Docker",
-      level: "error",
-      title: "退出码异常",
-    })
-  }
-
-  if (docker.health && docker.health !== "healthy") {
-    items.push({
-      detail: `健康状态 ${docker.health}。`,
-      key: "docker:health",
-      label: "Docker",
-      level: docker.health === "unhealthy" ? "error" : "warning",
-      title: "健康检查异常",
-    })
-  }
-
-  if (ros.level !== "ok") {
-    items.push({
-      detail: formatDisplaySummary(ros.summary),
-      key: "ros:level",
-      label: "ROS",
-      level: normalizeDiagnosticLevel(ros.level),
-      title: "ROS 状态异常",
-    })
-  }
-
-  if (!ros.agent_available) {
-    items.push({
-      detail: "ROS 代理当前不可用。",
-      key: "ros:agent",
-      label: "ROS",
-      level: docker.running ? "warning" : "error",
-      title: "代理不可用",
-    })
-  }
-
-  for (const node of ros.expected_nodes) {
-    if (!node.present) {
-      items.push({
-        detail: `最近出现 ${formatNullableTimestamp(node.last_seen)}。`,
-        key: `ros:node:${node.name}`,
-        label: "预期节点",
-        level: "warning",
-        title: node.name,
-      })
-    }
-  }
-
-  for (const topic of ros.topics) {
-    if (!topic.present) {
-      items.push({
-        detail: `${topic.resolved_name} 缺少${formatEndpointRole(
-          topic.required_endpoint,
-        )}。`,
-        key: `ros:topic:${topic.name}:${topic.resolved_name}`,
-        label: "话题",
-        level: "warning",
-        title: topic.resolved_name,
-      })
-      continue
-    }
-
-    if (topic.freshness?.fresh === false) {
-      items.push({
-        detail: `最近消息 ${formatNullableTimestamp(
-          topic.freshness.last_message_at,
-        )}。`,
-        key: `ros:topic-freshness:${topic.name}:${topic.resolved_name}`,
-        label: "话题",
-        level: "warning",
-        title: topic.resolved_name,
-      })
-    }
-  }
-
-  for (const diagnostic of ros.diagnostics) {
-    items.push({
-      detail: diagnostic.message,
-      key: `ros:diagnostic:${diagnostic.name}:${diagnostic.hardware_id}`,
-      label: diagnostic.hardware_id
-        ? `ROS 诊断 / ${diagnostic.hardware_id}`
-        : "ROS 诊断",
-      level: normalizeDiagnosticLevel(diagnostic.level),
-      title: diagnostic.name,
-    })
-  }
-
-  return items
+      <AccordionContent className="pb-2">
+        <div className="divide-y divide-border/70 overflow-hidden rounded-md border border-border bg-card/70">
+          {group.entries.map((entry) => (
+            <div key={entry.key} className="px-2.5 py-1.5">
+              <div className="flex min-w-0 items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="break-words text-xs font-semibold text-card-foreground">
+                    {entry.title}
+                  </p>
+                  <p className="mt-0.5 break-words text-[11px] font-medium text-muted-foreground">
+                    {entry.label}
+                  </p>
+                </div>
+                <CompactStatusPill level={entry.level}>
+                  {formatOverallLevel(entry.level)}
+                </CompactStatusPill>
+              </div>
+              <p className="mt-1 break-words text-xs leading-relaxed text-muted-foreground">
+                {entry.detail}
+              </p>
+            </div>
+          ))}
+        </div>
+      </AccordionContent>
+    </AccordionItem>
+  )
 }
 
-function normalizeDiagnosticLevel(level: OverallLevel): OverallLevel {
-  return level === "unknown" ? "warning" : level
+function CompactStatusPill({
+  children,
+  level,
+}: {
+  children: ReactNode
+  level: OverallLevel
+}) {
+  return (
+    <span
+      className={cn(
+        "inline-flex shrink-0 items-center gap-1 rounded-md border px-1.5 py-0.5 text-[11px] font-semibold uppercase leading-none",
+        levelStyles[level],
+      )}
+    >
+      {children}
+    </span>
+  )
 }
 
 function RosListPanel({
