@@ -117,7 +117,6 @@ import type {
   RestartResponse,
   ResetOriginPreset,
   ServiceDefinition,
-  ServiceRiskLevel,
   ServiceStats,
   ServiceStatus,
 } from "@/types/management"
@@ -131,12 +130,9 @@ import { cn } from "@/lib/utils"
 
 type StatusFilter = OverallLevel | "all"
 
-type RiskFilter = ServiceRiskLevel | "all"
-
 interface ServiceFilterState {
   status: StatusFilter
   category: string
-  risk: RiskFilter
 }
 
 const allFilterValue = "all"
@@ -148,25 +144,11 @@ const levelStyles: Record<OverallLevel, string> = {
   unknown: "border-zinc-200 bg-zinc-50 text-zinc-700",
 }
 
-const riskStyles: Record<ServiceRiskLevel, string> = {
-  low: "border-sky-200 bg-sky-50 text-sky-800",
-  medium: "border-amber-200 bg-amber-50 text-amber-900",
-  high: "border-red-200 bg-red-50 text-red-800",
-  critical: "border-red-300 bg-red-100 text-red-900",
-}
-
 const overallLabels: Record<OverallLevel, string> = {
   ok: "正常",
   warning: "警告",
   error: "错误",
   unknown: "未知",
-}
-
-const riskLabels: Record<ServiceRiskLevel, string> = {
-  low: "低",
-  medium: "中",
-  high: "高",
-  critical: "严重",
 }
 
 const dockerStateLabels: Record<DockerState, string> = {
@@ -281,7 +263,6 @@ function ManagementApp() {
   const [filters, setFilters] = useState<ServiceFilterState>({
     status: allFilterValue,
     category: allFilterValue,
-    risk: allFilterValue,
   })
   const filteredServices = useMemo(
     () => filterServices(services, filters),
@@ -1277,11 +1258,10 @@ function ServiceOverview({
         <div className="min-h-0 flex-1 overflow-y-auto">
           <table className="w-full table-fixed border-collapse text-left">
             <colgroup>
-              <col className="w-[30%]" />
-              <col className="w-[14%]" />
+              <col className="w-[32%]" />
               <col className="w-[17%]" />
+              <col className="w-[21%]" />
               <col className="w-[20%]" />
-              <col className="w-[9%]" />
               <col className="w-[10%]" />
             </colgroup>
             <thead>
@@ -1290,7 +1270,6 @@ function ServiceOverview({
                 <th className="px-4 py-3 font-semibold">总体</th>
                 <th className="px-4 py-3 font-semibold">Docker</th>
                 <th className="px-4 py-3 font-semibold">ROS</th>
-                <th className="px-4 py-3 font-semibold">风险</th>
                 <th className="px-4 py-3 text-right font-semibold">详情</th>
               </tr>
             </thead>
@@ -1344,7 +1323,7 @@ function ServiceFilterBar({
 }: ServiceFiltersProps) {
   return (
     <div className="grid shrink-0 gap-3 border-b border-border p-3 lg:grid-cols-[1fr_auto] lg:items-end">
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="grid gap-3 sm:grid-cols-2">
         <FilterSelect
           disabled={disabled}
           label="总体"
@@ -1371,20 +1350,6 @@ function ServiceFilterBar({
               {category}
             </option>
           ))}
-        </FilterSelect>
-        <FilterSelect
-          disabled={disabled}
-          label="风险"
-          value={filters.risk}
-          onChange={(risk) =>
-            onUpdate({ ...filters, risk: risk as RiskFilter })
-          }
-        >
-          <option value={allFilterValue}>全部风险</option>
-          <option value="low">低</option>
-          <option value="medium">中</option>
-          <option value="high">高</option>
-          <option value="critical">严重</option>
         </FilterSelect>
       </div>
       <div className="flex flex-wrap items-center gap-3 lg:justify-end">
@@ -1486,7 +1451,7 @@ function NoFilteredServicesState() {
           没有服务匹配当前筛选
         </h2>
         <p className="mt-2 text-sm text-muted-foreground">
-          调整状态、类别或风险筛选即可返回完整后端快照。
+          调整状态或类别筛选即可返回完整后端快照。
         </p>
       </div>
     </div>
@@ -2353,9 +2318,6 @@ function ServiceRow({
           个话题
         </p>
       </td>
-      <td className="px-4 py-3">
-        <RiskPill riskLevel={service.risk_level} />
-      </td>
       <td className="px-4 py-3 text-right">
         <button
           type="button"
@@ -2432,17 +2394,9 @@ function StatusPill({
   )
 }
 
-function RiskPill({ riskLevel }: { riskLevel: ServiceRiskLevel }) {
-  return (
-    <span
-      className={cn(
-        "inline-flex items-center rounded-md border px-2.5 py-1 text-xs font-semibold capitalize",
-        riskStyles[riskLevel],
-      )}
-    >
-      {formatRiskLevel(riskLevel)}
-    </span>
-  )
+interface StatsPopoverRequestBaseline {
+  error: ApiError | null
+  loadedAt: string | null
 }
 
 function ServiceInspector({
@@ -2466,7 +2420,12 @@ function ServiceInspector({
     stderr: true,
     timestamps: true,
   })
-  const [statsExpanded, setStatsExpanded] = useState(false)
+  const [statsPopoverOpen, setStatsPopoverOpen] = useState(false)
+  const [statsRequestBaseline, setStatsRequestBaseline] =
+    useState<StatsPopoverRequestBaseline | null>(null)
+  const [statsLoadObserved, setStatsLoadObserved] = useState(false)
+  const statsButtonRef = useRef<HTMLButtonElement | null>(null)
+  const statsPopoverId = useId()
   const diagnosticsServiceName = routeServiceName || service?.service_name || null
   const diagnostics = useSelectedServiceDiagnostics(
     diagnosticsServiceName,
@@ -2476,23 +2435,71 @@ function ServiceInspector({
   const detailService = diagnostics.detail.data ?? service
 
   useEffect(() => {
-    setStatsExpanded(false)
+    setStatsPopoverOpen(false)
+    setStatsRequestBaseline(null)
+    setStatsLoadObserved(false)
   }, [detailService?.service_name])
 
   const detailBusy = diagnostics.detail.loading || diagnostics.detail.refreshing
   const statsBusy = diagnostics.stats.loading || diagnostics.stats.refreshing
+  const statsButtonBusy = statsBusy || statsRequestBaseline !== null
 
-  const handleToggleStats = useCallback(() => {
-    setStatsExpanded((current) => {
-      const next = !current
-
-      if (next) {
-        diagnostics.refreshStats()
-      }
-
-      return next
+  const handleOpenStats = useCallback(() => {
+    setStatsPopoverOpen(false)
+    setStatsLoadObserved(false)
+    setStatsRequestBaseline({
+      error: diagnostics.stats.error,
+      loadedAt: diagnostics.stats.loadedAt,
     })
+    diagnostics.refreshStats()
   }, [diagnostics])
+
+  useEffect(() => {
+    if (statsRequestBaseline === null) {
+      return
+    }
+
+    if (statsBusy) {
+      setStatsLoadObserved(true)
+      return
+    }
+
+    const loadedAtChanged =
+      diagnostics.stats.loadedAt !== statsRequestBaseline.loadedAt
+    const errorChanged =
+      diagnostics.stats.error !== null &&
+      diagnostics.stats.error !== statsRequestBaseline.error
+
+    if (!statsLoadObserved && !loadedAtChanged && !errorChanged) {
+      return
+    }
+
+    setStatsRequestBaseline(null)
+    setStatsLoadObserved(false)
+    setStatsPopoverOpen(true)
+  }, [
+    diagnostics.stats.error,
+    diagnostics.stats.loadedAt,
+    statsBusy,
+    statsLoadObserved,
+    statsRequestBaseline,
+  ])
+
+  useEffect(() => {
+    if (
+      statsRequestBaseline === null ||
+      statsBusy ||
+      statsLoadObserved
+    ) {
+      return
+    }
+
+    const fallbackTimer = window.setTimeout(() => {
+      setStatsLoadObserved(true)
+    }, 180)
+
+    return () => window.clearTimeout(fallbackTimer)
+  }, [statsBusy, statsLoadObserved, statsRequestBaseline])
 
   return (
     <div className="grid h-full min-h-0 gap-4 xl:grid-cols-[minmax(0,1fr)_240px]">
@@ -2509,7 +2516,9 @@ function ServiceInspector({
                     {detailService.display_name}
                   </h2>
                   <p className="mt-1 truncate text-xs text-muted-foreground">
-                    {detailService.service_name}
+                    逻辑 {detailService.service_name} · Profile{" "}
+                    {detailService.compose_profile} · 类别{" "}
+                    {detailService.category}
                   </p>
                 </div>
                 <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
@@ -2532,15 +2541,25 @@ function ServiceInspector({
                     type="button"
                     className={cn(
                       "inline-flex h-9 items-center gap-2 rounded-md border px-3 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-70",
-                      statsExpanded
+                      statsPopoverOpen || statsButtonBusy
                         ? "border-primary bg-primary text-primary-foreground hover:bg-primary/90"
                         : "border-border bg-card text-card-foreground hover:bg-muted",
                     )}
-                    disabled={!detailService || statsBusy}
-                    onClick={handleToggleStats}
-                    aria-expanded={statsExpanded}
+                    disabled={!detailService || statsButtonBusy}
+                    onClick={handleOpenStats}
+                    aria-controls={statsPopoverId}
+                    aria-expanded={statsPopoverOpen}
+                    aria-haspopup="dialog"
+                    ref={statsButtonRef}
                   >
-                    <Cpu aria-hidden="true" className="size-4" />
+                    {statsButtonBusy ? (
+                      <LoaderCircle
+                        aria-hidden="true"
+                        className="size-4 animate-spin"
+                      />
+                    ) : (
+                      <Cpu aria-hidden="true" className="size-4" />
+                    )}
                     统计
                   </button>
                   <button
@@ -2562,14 +2581,7 @@ function ServiceInspector({
                 </div>
               </div>
 
-              <dl className="mt-4 grid grid-cols-4 gap-3 text-sm">
-                <DetailItem label="逻辑名称" value={detailService.service_name} />
-                <DetailItem label="Profile" value={detailService.compose_profile} />
-                <DetailItem label="类别" value={detailService.category} />
-                <DetailItem label="风险" value={formatRiskLevel(detailService.risk_level)} />
-              </dl>
-
-              <p className="mt-4 text-xs text-muted-foreground">
+              <p className="mt-3 text-xs text-muted-foreground">
                 {diagnostics.detail.loadedAt
                   ? `详情已加载 ${formatTimestamp(diagnostics.detail.loadedAt)}`
                   : "详情会从当前选中的逻辑服务加载"}
@@ -2611,21 +2623,23 @@ function ServiceInspector({
             onUpdateOptions={setLogOptions}
           />
 
-          {statsExpanded ? (
-            <StatsPanel
-              error={diagnostics.stats.error}
-              loadedAt={diagnostics.stats.loadedAt}
-              loading={diagnostics.stats.loading}
-              refreshing={diagnostics.stats.refreshing}
-              stats={diagnostics.stats.data}
-              service={detailService}
-              onRefresh={diagnostics.refreshStats}
-            />
-          ) : null}
-
           <CombinedStatusPanel definition={definition} service={detailService} />
         </div>
       </aside>
+
+      <StatsPopover
+        error={diagnostics.stats.error}
+        loadedAt={diagnostics.stats.loadedAt}
+        loading={diagnostics.stats.loading}
+        open={statsPopoverOpen}
+        popoverId={statsPopoverId}
+        refreshing={diagnostics.stats.refreshing}
+        service={detailService}
+        stats={diagnostics.stats.data}
+        triggerRef={statsButtonRef}
+        onClose={() => setStatsPopoverOpen(false)}
+        onRefresh={handleOpenStats}
+      />
 
       <ServiceContainerSwitcher
         currentServiceName={detailService?.service_name ?? routeServiceName}
@@ -2754,152 +2768,171 @@ function CombinedStatusPanel({
   definition: ServiceDefinition | null
   service: ServiceStatus | null
 }) {
+  const [activePopover, setActivePopover] =
+    useState<StatusPopoverKind | null>(null)
+  const statusButtonRef = useRef<HTMLButtonElement | null>(null)
+  const dockerButtonRef = useRef<HTMLButtonElement | null>(null)
+  const rosButtonRef = useRef<HTMLButtonElement | null>(null)
+  const statusPopoverId = useId()
   const docker = service?.docker
   const ros = service?.ros
+  const diagnosticItems = service ? getServiceDiagnosticItems(service) : []
+  const presentExpectedNodes = ros?.expected_nodes.filter((node) => node.present) ?? []
+  const observedTopics = ros?.topics.filter((topic) => topic.present) ?? []
+  const canOpenStatusPopover = Boolean(service && docker && ros)
+  const activeTriggerRef =
+    activePopover === "status"
+      ? statusButtonRef
+      : activePopover === "docker"
+        ? dockerButtonRef
+        : rosButtonRef
+
+  useEffect(() => {
+    setActivePopover(null)
+  }, [service?.service_name])
+
+  const handleTogglePopover = useCallback((kind: StatusPopoverKind) => {
+    setActivePopover((current) => (current === kind ? null : kind))
+  }, [])
+  const handleClosePopover = useCallback(() => {
+    setActivePopover(null)
+  }, [])
 
   return (
     <section className="rounded-lg border border-border bg-card p-5 shadow-sm">
-      <PanelHeader
-        detail={
-          service
-            ? `${formatDockerSummary(service)}；${formatRosSummary(service)}`
-            : "等待选择服务"
-        }
-        icon={Gauge}
-        title="状态总览"
-      />
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <PanelHeader
+          detail={
+            service
+              ? `${formatDockerSummary(service)}；${formatRosSummary(service)}`
+              : "等待选择服务"
+          }
+          icon={Gauge}
+          title="状态总览"
+        />
+        <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+          <StatusPopoverButton
+            active={activePopover === "status"}
+            ariaControls={statusPopoverId}
+            buttonRef={statusButtonRef}
+            disabled={!canOpenStatusPopover}
+            icon={Gauge}
+            label="状态"
+            onClick={() => handleTogglePopover("status")}
+          />
+          <StatusPopoverButton
+            active={activePopover === "docker"}
+            ariaControls={statusPopoverId}
+            buttonRef={dockerButtonRef}
+            disabled={!canOpenStatusPopover}
+            icon={Container}
+            label="Docker"
+            onClick={() => handleTogglePopover("docker")}
+          />
+          <StatusPopoverButton
+            active={activePopover === "ros"}
+            ariaControls={statusPopoverId}
+            buttonRef={rosButtonRef}
+            disabled={!canOpenStatusPopover}
+            icon={ros?.agent_available ? Wifi : WifiOff}
+            label="ROS"
+            onClick={() => handleTogglePopover("ros")}
+          />
+        </div>
+      </div>
 
       {service && docker && ros ? (
-        <div className="mt-4 space-y-4">
-          <dl className="grid gap-3 text-sm md:grid-cols-3 xl:grid-cols-4">
-            <DetailItem
-              label="总体"
-              value={`${formatOverallLevel(service.overall.level)}：${formatDisplaySummary(service.overall.reason)}`}
-            />
-            <DetailItem
-              label="Docker"
-              value={`${formatDockerState(docker.state)} / 运行=${formatBoolean(
-                docker.running,
-              )}`}
-            />
-            <DetailItem label="容器状态" value={docker.status ?? "未上报"} />
-            <DetailItem
-              label="重启次数"
-              value={formatRestartCount(docker.restart_count)}
-            />
-            <DetailItem
-              label="退出码"
-              value={
-                docker.exit_code === null
-                  ? "未上报"
-                  : docker.exit_code.toString()
-              }
-            />
-            <DetailItem label="健康状态" value={docker.health ?? "未上报"} />
-            <DetailItem
-              label="ROS 代理"
-              value={ros.agent_available ? "可用" : "不可用"}
-            />
-            <DetailItem
-              label="ROS 等级"
-              value={`${formatOverallLevel(ros.level)}：${formatDisplaySummary(
-                ros.summary,
-              )}`}
-            />
-            <DetailItem
-              label="ROS 节点"
-              value={`${ros.expected_nodes.length} 个预期节点`}
-            />
-            <DetailItem
-              label="ROS 话题"
-              value={`${ros.topics.length} 个观测话题 / ${
-                definition?.expected_topics.length ?? 0
-              } 个配置话题`}
-            />
-          </dl>
-
-          <div className="grid gap-4 xl:grid-cols-3">
-            <RosListPanel title="预期节点">
-              {ros.expected_nodes.length > 0 ? (
-                ros.expected_nodes.map((node) => (
-                  <div
-                    key={node.name}
-                    className="rounded-md border border-border bg-muted/60 p-3 text-sm"
-                  >
-                    <div className="flex min-w-0 items-center justify-between gap-3">
-                      <span className="truncate font-medium text-card-foreground">
-                        {node.name}
-                      </span>
-                      <span
-                        className={cn(
-                          "shrink-0 rounded-md border px-2 py-1 text-xs font-semibold",
-                          node.present
-                            ? "border-emerald-200 bg-emerald-50 text-emerald-800"
-                            : "border-amber-200 bg-amber-50 text-amber-900",
-                        )}
+        <div className="mt-4">
+          <div className="grid gap-4 xl:grid-cols-2">
+            <RosListPanel title="ROS 观测">
+              <div className="rounded-md border border-border bg-muted/60 p-3 text-sm">
+                <div className="flex min-w-0 items-center justify-between gap-3">
+                  <span className="font-medium text-card-foreground">
+                    预期节点
+                  </span>
+                  <span className="shrink-0 text-xs font-semibold text-muted-foreground">
+                    {presentExpectedNodes.length}/{ros.expected_nodes.length} 在线
+                  </span>
+                </div>
+                <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                  {presentExpectedNodes.length > 0 ? (
+                    presentExpectedNodes.map((node) => (
+                      <div
+                        key={node.name}
+                        className="min-w-0 rounded-md border border-emerald-200 bg-emerald-50 px-2.5 py-2 text-xs text-emerald-800"
                       >
-                        {node.present ? "存在" : "缺失"}
-                      </span>
-                    </div>
-                    <p className="mt-2 truncate text-xs text-muted-foreground">
-                      最近出现 {formatNullableTimestamp(node.last_seen)}
+                        <p className="truncate font-semibold">{node.name}</p>
+                        <p className="mt-1 truncate">
+                          最近出现 {formatNullableTimestamp(node.last_seen)}
+                        </p>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="text-xs text-muted-foreground">
+                      当前没有在线预期节点。
                     </p>
-                  </div>
-                ))
-              ) : (
-                <EmptyPanelText text="该服务未返回预期节点。" />
-              )}
-            </RosListPanel>
+                  )}
+                </div>
+              </div>
 
-            <RosListPanel title="话题">
-              {ros.topics.length > 0 ? (
-                ros.topics.map((topic) => (
-                  <div
-                    key={`${topic.name}:${topic.resolved_name}`}
-                    className="rounded-md border border-border bg-muted/60 p-3 text-sm"
-                  >
-                    <div className="flex min-w-0 items-center justify-between gap-3">
-                      <span className="truncate font-medium text-card-foreground">
-                        {topic.resolved_name}
-                      </span>
-                      <span className="shrink-0 text-xs font-semibold text-muted-foreground">
-                        {topic.present ? "存在" : "缺失"}
-                      </span>
-                    </div>
-                    <p className="mt-2 truncate text-xs text-muted-foreground">
-                      {formatEndpointRole(topic.required_endpoint)}，发布者{" "}
-                      {topic.publisher_count}，订阅者{" "}
-                      {topic.subscriber_count}
+              <div className="rounded-md border border-border bg-muted/60 p-3 text-sm">
+                <div className="flex min-w-0 items-center justify-between gap-3">
+                  <span className="font-medium text-card-foreground">话题</span>
+                  <span className="shrink-0 text-xs font-semibold text-muted-foreground">
+                    {observedTopics.length}/{ros.topics.length} 观测
+                  </span>
+                </div>
+                <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                  {observedTopics.length > 0 ? (
+                    observedTopics.map((topic) => (
+                      <div
+                        key={`${topic.name}:${topic.resolved_name}`}
+                        className="min-w-0 rounded-md border border-border bg-card px-2.5 py-2 text-xs"
+                      >
+                        <p className="truncate font-semibold text-card-foreground">
+                          {topic.resolved_name}
+                        </p>
+                        <p className="mt-1 truncate text-muted-foreground">
+                          {formatEndpointRole(topic.required_endpoint)}，发布者{" "}
+                          {topic.publisher_count}，订阅者{" "}
+                          {topic.subscriber_count}
+                        </p>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="text-xs text-muted-foreground">
+                      当前没有观测到配置话题。
                     </p>
-                  </div>
-                ))
-              ) : (
-                <EmptyPanelText text="该服务未返回话题观测结果。" />
-              )}
+                  )}
+                </div>
+              </div>
             </RosListPanel>
 
             <RosListPanel title="诊断">
-              {ros.diagnostics.length > 0 ? (
-                ros.diagnostics.map((diagnostic) => (
+              {diagnosticItems.length > 0 ? (
+                diagnosticItems.map((diagnostic) => (
                   <div
-                    key={`${diagnostic.name}:${diagnostic.hardware_id}`}
+                    key={diagnostic.key}
                     className="rounded-md border border-border bg-muted/60 p-3 text-sm"
                   >
                     <div className="flex min-w-0 items-center justify-between gap-3">
                       <span className="truncate font-medium text-card-foreground">
-                        {diagnostic.name}
+                        {diagnostic.title}
                       </span>
                       <StatusPill level={diagnostic.level}>
                         {formatOverallLevel(diagnostic.level)}
                       </StatusPill>
                     </div>
-                    <p className="mt-2 line-clamp-2 text-xs text-muted-foreground">
-                      {diagnostic.message}
+                    <p className="mt-1 truncate text-xs font-medium text-muted-foreground">
+                      {diagnostic.label}
+                    </p>
+                    <p className="mt-2 text-xs text-muted-foreground">
+                      {diagnostic.detail}
                     </p>
                   </div>
                 ))
               ) : (
-                <EmptyPanelText text="该服务未返回 ROS 诊断。" />
+                <EmptyPanelText text="该服务当前没有警告或错误诊断。" />
               )}
             </RosListPanel>
           </div>
@@ -2907,8 +2940,455 @@ function CombinedStatusPanel({
       ) : (
         <EmptyPanelText text="选择已注册服务后加载状态总览。" />
       )}
+      <StatusSummaryPopover
+        definition={definition}
+        kind={activePopover}
+        open={activePopover !== null}
+        popoverId={statusPopoverId}
+        service={service}
+        triggerRef={activeTriggerRef}
+        onClose={handleClosePopover}
+      />
     </section>
   )
+}
+
+type StatusPopoverKind = "status" | "docker" | "ros"
+
+interface StatusPopoverItem {
+  label: string
+  value: string
+}
+
+interface StatusPopoverCopy {
+  detail: string
+  icon: LucideIcon
+  items: StatusPopoverItem[]
+  title: string
+}
+
+interface ServiceDiagnosticItem {
+  detail: string
+  key: string
+  label: string
+  level: OverallLevel
+  title: string
+}
+
+function StatusPopoverButton({
+  active,
+  ariaControls,
+  buttonRef,
+  disabled,
+  icon: Icon,
+  label,
+  onClick,
+}: {
+  active: boolean
+  ariaControls: string
+  buttonRef: RefObject<HTMLButtonElement | null>
+  disabled: boolean
+  icon: LucideIcon
+  label: string
+  onClick: () => void
+}) {
+  return (
+    <button
+      type="button"
+      aria-controls={ariaControls}
+      aria-expanded={active}
+      aria-haspopup="dialog"
+      className={cn(
+        "inline-flex h-8 items-center gap-1.5 rounded-md border px-2.5 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-60",
+        active
+          ? "border-primary bg-primary text-primary-foreground hover:bg-primary/90"
+          : "border-border bg-card text-card-foreground hover:bg-muted",
+      )}
+      disabled={disabled}
+      onClick={onClick}
+      ref={buttonRef}
+    >
+      <Icon aria-hidden="true" className="size-3.5" />
+      {label}
+    </button>
+  )
+}
+
+function StatusSummaryPopover({
+  definition,
+  kind,
+  open,
+  popoverId,
+  service,
+  triggerRef,
+  onClose,
+}: {
+  definition: ServiceDefinition | null
+  kind: StatusPopoverKind | null
+  open: boolean
+  popoverId: string
+  service: ServiceStatus | null
+  triggerRef: RefObject<HTMLButtonElement | null>
+  onClose: () => void
+}) {
+  const [position, setPosition] = useState<StatsPopoverPosition | null>(null)
+  const popoverRef = useRef<HTMLDivElement | null>(null)
+
+  const updatePosition = useCallback(() => {
+    const trigger = triggerRef.current
+
+    if (!trigger) {
+      return
+    }
+
+    const gap = 8
+    const margin = 16
+    const rect = trigger.getBoundingClientRect()
+    const viewportWidth = window.innerWidth
+    const width = Math.max(280, Math.min(420, viewportWidth - margin * 2))
+    const maxLeft = Math.max(margin, viewportWidth - width - margin)
+    const left = Math.min(Math.max(rect.right - width, margin), maxLeft)
+    const maxHeight = Number.POSITIVE_INFINITY
+    const top = Math.max(margin, rect.bottom + gap)
+
+    setPosition({ left, maxHeight, top, width })
+  }, [triggerRef])
+
+  useEffect(() => {
+    if (!open) {
+      setPosition(null)
+      return
+    }
+
+    updatePosition()
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        onClose()
+      }
+    }
+
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target
+
+      if (!(target instanceof Node)) {
+        return
+      }
+
+      if (
+        popoverRef.current?.contains(target) ||
+        triggerRef.current?.contains(target)
+      ) {
+        return
+      }
+
+      onClose()
+    }
+
+    document.addEventListener("keydown", handleKeyDown)
+    document.addEventListener("pointerdown", handlePointerDown)
+    document.addEventListener("scroll", updatePosition, true)
+    window.addEventListener("resize", updatePosition)
+
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown)
+      document.removeEventListener("pointerdown", handlePointerDown)
+      document.removeEventListener("scroll", updatePosition, true)
+      window.removeEventListener("resize", updatePosition)
+    }
+  }, [onClose, open, triggerRef, updatePosition])
+
+  if (
+    !open ||
+    kind === null ||
+    service === null ||
+    position === null ||
+    typeof document === "undefined"
+  ) {
+    return null
+  }
+
+  const copy = getStatusPopoverCopy(kind, service, definition)
+  const Icon = copy.icon
+  const style: CSSProperties = {
+    left: position.left,
+    top: position.top,
+    width: position.width,
+  }
+
+  return createPortal(
+    <div
+      aria-labelledby={`${popoverId}-title`}
+      aria-modal="false"
+      className="fixed z-50 rounded-lg border border-border bg-popover text-popover-foreground shadow-2xl ring-1 ring-black/5"
+      id={popoverId}
+      ref={popoverRef}
+      role="dialog"
+      style={style}
+    >
+      <div className="flex shrink-0 items-start justify-between gap-3 border-b border-border p-4">
+        <div className="min-w-0">
+          <h3
+            className="flex items-center gap-2 text-base font-semibold text-card-foreground"
+            id={`${popoverId}-title`}
+          >
+            <Icon aria-hidden="true" className="size-4 text-primary" />
+            {copy.title}
+          </h3>
+          <p className="mt-1 truncate text-xs text-muted-foreground">
+            {copy.detail}
+          </p>
+        </div>
+        <button
+          type="button"
+          aria-label={`关闭${copy.title}浮层`}
+          className="inline-flex size-8 shrink-0 items-center justify-center rounded-md border border-border bg-card text-card-foreground hover:bg-muted"
+          onClick={onClose}
+        >
+          <X aria-hidden="true" className="size-4" />
+        </button>
+      </div>
+
+      <dl className="grid grid-cols-2 gap-2 p-4 text-sm">
+        {copy.items.map((item) => (
+          <div
+            key={item.label}
+            className="rounded-md border border-border bg-muted/60 p-3"
+          >
+            <dt className="text-xs font-medium text-muted-foreground">
+              {item.label}
+            </dt>
+            <dd className="mt-1 break-words font-semibold text-card-foreground">
+              {item.value}
+            </dd>
+          </div>
+        ))}
+      </dl>
+    </div>,
+    document.body,
+  )
+}
+
+function getStatusPopoverCopy(
+  kind: StatusPopoverKind,
+  service: ServiceStatus,
+  definition: ServiceDefinition | null,
+): StatusPopoverCopy {
+  if (kind === "status") {
+    return {
+      detail: service.service_name,
+      icon: overallIcons[service.overall.level],
+      items: [
+        {
+          label: "总体",
+          value: `${formatOverallLevel(service.overall.level)}：${formatDisplaySummary(
+            service.overall.reason,
+          )}`,
+        },
+      ],
+      title: "状态",
+    }
+  }
+
+  if (kind === "docker") {
+    const docker = service.docker
+
+    return {
+      detail: service.container_name,
+      icon: Container,
+      items: [
+        {
+          label: "运行状态",
+          value: `${formatDockerState(docker.state)} / 运行=${formatBoolean(
+            docker.running,
+          )}`,
+        },
+        {
+          label: "容器状态",
+          value: docker.status ?? "未上报",
+        },
+        {
+          label: "重启次数",
+          value: formatRestartCount(docker.restart_count),
+        },
+        {
+          label: "退出码",
+          value:
+            docker.exit_code === null ? "未上报" : docker.exit_code.toString(),
+        },
+        {
+          label: "健康状态",
+          value: docker.health ?? "未上报",
+        },
+      ],
+      title: "Docker",
+    }
+  }
+
+  const ros = service.ros
+
+  return {
+    detail: formatRosSummary(service),
+    icon: ros.agent_available ? Wifi : WifiOff,
+    items: [
+      {
+        label: "代理",
+        value: ros.agent_available ? "可用" : "不可用",
+      },
+      {
+        label: "等级",
+        value: `${formatOverallLevel(ros.level)}：${formatDisplaySummary(
+          ros.summary,
+        )}`,
+      },
+      {
+        label: "节点",
+        value: `${ros.expected_nodes.length} 个预期节点`,
+      },
+      {
+        label: "话题",
+        value: `${ros.topics.length} 个观测话题 / ${
+          definition?.expected_topics.length ?? 0
+        } 个配置话题`,
+      },
+    ],
+    title: "ROS",
+  }
+}
+
+function getServiceDiagnosticItems(
+  service: ServiceStatus,
+): ServiceDiagnosticItem[] {
+  const items: ServiceDiagnosticItem[] = []
+  const docker = service.docker
+  const ros = service.ros
+
+  if (service.overall.level !== "ok") {
+    items.push({
+      detail: formatDisplaySummary(service.overall.reason),
+      key: "overall",
+      label: "总体状态",
+      level: normalizeDiagnosticLevel(service.overall.level),
+      title: "总体异常",
+    })
+  }
+
+  if (!docker.exists) {
+    items.push({
+      detail: "Docker 容器未存在于当前后端快照。",
+      key: "docker:missing",
+      label: "Docker",
+      level: "error",
+      title: "容器缺失",
+    })
+  } else if (!docker.running || docker.state !== "running") {
+    items.push({
+      detail: `${formatDockerState(docker.state)}，运行=${formatBoolean(
+        docker.running,
+      )}${docker.status ? `，状态 ${docker.status}` : ""}`,
+      key: "docker:state",
+      label: "Docker",
+      level: docker.running ? "warning" : "error",
+      title: "运行状态异常",
+    })
+  }
+
+  if (docker.exit_code !== null && docker.exit_code !== 0) {
+    items.push({
+      detail: `容器退出码 ${docker.exit_code}。`,
+      key: "docker:exit-code",
+      label: "Docker",
+      level: "error",
+      title: "退出码异常",
+    })
+  }
+
+  if (docker.health && docker.health !== "healthy") {
+    items.push({
+      detail: `健康状态 ${docker.health}。`,
+      key: "docker:health",
+      label: "Docker",
+      level: docker.health === "unhealthy" ? "error" : "warning",
+      title: "健康检查异常",
+    })
+  }
+
+  if (ros.level !== "ok") {
+    items.push({
+      detail: formatDisplaySummary(ros.summary),
+      key: "ros:level",
+      label: "ROS",
+      level: normalizeDiagnosticLevel(ros.level),
+      title: "ROS 状态异常",
+    })
+  }
+
+  if (!ros.agent_available) {
+    items.push({
+      detail: "ROS 代理当前不可用。",
+      key: "ros:agent",
+      label: "ROS",
+      level: docker.running ? "warning" : "error",
+      title: "代理不可用",
+    })
+  }
+
+  for (const node of ros.expected_nodes) {
+    if (!node.present) {
+      items.push({
+        detail: `最近出现 ${formatNullableTimestamp(node.last_seen)}。`,
+        key: `ros:node:${node.name}`,
+        label: "预期节点",
+        level: "warning",
+        title: node.name,
+      })
+    }
+  }
+
+  for (const topic of ros.topics) {
+    if (!topic.present) {
+      items.push({
+        detail: `${topic.resolved_name} 缺少${formatEndpointRole(
+          topic.required_endpoint,
+        )}。`,
+        key: `ros:topic:${topic.name}:${topic.resolved_name}`,
+        label: "话题",
+        level: "warning",
+        title: topic.resolved_name,
+      })
+      continue
+    }
+
+    if (topic.freshness?.fresh === false) {
+      items.push({
+        detail: `最近消息 ${formatNullableTimestamp(
+          topic.freshness.last_message_at,
+        )}。`,
+        key: `ros:topic-freshness:${topic.name}:${topic.resolved_name}`,
+        label: "话题",
+        level: "warning",
+        title: topic.resolved_name,
+      })
+    }
+  }
+
+  for (const diagnostic of ros.diagnostics) {
+    items.push({
+      detail: diagnostic.message,
+      key: `ros:diagnostic:${diagnostic.name}:${diagnostic.hardware_id}`,
+      label: diagnostic.hardware_id
+        ? `ROS 诊断 / ${diagnostic.hardware_id}`
+        : "ROS 诊断",
+      level: normalizeDiagnosticLevel(diagnostic.level),
+      title: diagnostic.name,
+    })
+  }
+
+  return items
+}
+
+function normalizeDiagnosticLevel(level: OverallLevel): OverallLevel {
+  return level === "unknown" ? "warning" : level
 }
 
 function RosListPanel({
@@ -2921,7 +3401,7 @@ function RosListPanel({
   return (
     <div className="min-h-0 rounded-md border border-border bg-card p-3">
       <h4 className="text-sm font-semibold text-card-foreground">{title}</h4>
-      <div className="mt-2 max-h-[420px] space-y-2 overflow-y-auto">
+      <div className="mt-2 space-y-2">
         {children}
       </div>
     </div>
@@ -2948,6 +3428,14 @@ function LogsPanel({
   const lines = logs.data?.lines ?? []
   const containerName = logs.data?.container_name ?? service?.container_name ?? null
   const streamState = getServiceLogStreamStateCopy(logs)
+  const connectionSummary = logs.openedAt
+    ? `实时连接 ${formatTimestamp(logs.openedAt)}`
+    : logs.loadedAt
+      ? `加载 ${formatTimestamp(logs.loadedAt)}`
+      : "等待连接"
+  const streamReason = logs.streamReason
+    ? formatServiceLogStreamReason(logs.streamReason)
+    : null
 
   useEffect(() => {
     setAutoFollow(true)
@@ -2983,16 +3471,43 @@ function LogsPanel({
 
   return (
     <section className="rounded-lg border border-border bg-card p-5 shadow-sm">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <PanelHeader
-          detail={
-            containerName
-              ? `${containerName}，缓存 ${lines.length}/${logs.acceptedTail} 行`
-              : "有界实时 Docker 容器日志"
-          }
-          icon={FileText}
-          title="Docker 日志"
-        />
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-sm">
+          <h3 className="flex items-center gap-2 text-base font-semibold text-card-foreground">
+            <FileText aria-hidden="true" className="size-4" />
+            Docker 日志
+          </h3>
+          <span className="font-medium text-muted-foreground">
+            {containerName ?? "未选择容器"}，缓存 {lines.length}/
+            {logs.acceptedTail} 行
+          </span>
+          <span className="text-muted-foreground">·</span>
+          <span
+            className={cn(
+              "inline-flex items-center gap-1.5 font-semibold",
+              streamState.textClassName,
+            )}
+          >
+            <streamState.icon
+              aria-hidden="true"
+              className={cn("size-4 shrink-0", busy && "animate-spin")}
+            />
+            {streamState.label}
+          </span>
+          <span className="text-muted-foreground">·</span>
+          <span className="font-semibold text-card-foreground">
+            {autoFollow ? "自动跟随" : "跟随已暂停"}
+          </span>
+          <span className="text-muted-foreground">·</span>
+          <span className="font-semibold text-card-foreground">
+            最新 {logs.lastLineAt ? formatTimestamp(logs.lastLineAt) : "等待"}
+          </span>
+          <span className="text-muted-foreground">·</span>
+          <span className="min-w-0 text-xs text-muted-foreground">
+            {connectionSummary}
+            {streamReason ? `，${streamReason}` : ""}
+          </span>
+        </div>
         <div className="relative">
           <button
             type="button"
@@ -3068,35 +3583,6 @@ function LogsPanel({
       </div>
 
       {logs.error ? <PanelError error={logs.error} /> : null}
-      <p
-        className={cn(
-          "mt-4 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-sm font-semibold",
-          streamState.textClassName,
-        )}
-      >
-        <streamState.icon
-          aria-hidden="true"
-          className={cn("size-4 shrink-0", busy && "animate-spin")}
-        />
-        <span>{streamState.label}</span>
-        <span className="text-muted-foreground">·</span>
-        <span>{`缓存 ${lines.length}/${logs.acceptedTail} 行`}</span>
-        <span className="text-muted-foreground">·</span>
-        <span>{autoFollow ? "自动跟随" : "跟随已暂停"}</span>
-        <span className="text-muted-foreground">·</span>
-        <span>
-          最新 {logs.lastLineAt ? formatTimestamp(logs.lastLineAt) : "等待"}
-        </span>
-      </p>
-      <p className="mt-4 text-xs text-muted-foreground">
-        日志是 <code>{service?.service_name ?? "未选择服务"}</code>{" "}
-        的非结构化 Docker 容器输出
-        {logs.openedAt ? `，实时连接 ${formatTimestamp(logs.openedAt)}` : ""}
-        {logs.loadedAt && !logs.openedAt
-          ? `，加载时间 ${formatTimestamp(logs.loadedAt)}`
-          : ""}
-        {logs.streamReason ? `。${formatServiceLogStreamReason(logs.streamReason)}` : ""}。
-      </p>
       <pre
         ref={logViewportRef}
         className="mt-3 h-[420px] overflow-auto rounded-md border border-zinc-800 bg-zinc-950 p-3 text-xs leading-relaxed text-zinc-100"
@@ -3112,93 +3598,223 @@ function LogsPanel({
   )
 }
 
-function StatsPanel({
+interface StatsPopoverPosition {
+  left: number
+  maxHeight: number
+  top: number
+  width: number
+}
+
+function StatsPopover({
   error,
   loadedAt,
   loading,
+  open,
+  popoverId,
   refreshing,
   service,
   stats,
+  triggerRef,
+  onClose,
   onRefresh,
 }: {
   error: ApiError | null
   loadedAt: string | null
   loading: boolean
+  open: boolean
+  popoverId: string
   refreshing: boolean
   service: ServiceStatus | null
   stats: ServiceStats | null
+  triggerRef: RefObject<HTMLButtonElement | null>
+  onClose: () => void
   onRefresh: () => void
 }) {
   const busy = loading || refreshing
+  const [position, setPosition] = useState<StatsPopoverPosition | null>(null)
+  const popoverRef = useRef<HTMLDivElement | null>(null)
 
-  return (
-    <section className="rounded-lg border border-border bg-card p-5 shadow-sm">
-      <div className="flex items-start justify-between gap-3">
+  const updatePosition = useCallback(() => {
+    const trigger = triggerRef.current
+
+    if (!trigger) {
+      return
+    }
+
+    const gap = 8
+    const margin = 16
+    const rect = trigger.getBoundingClientRect()
+    const viewportWidth = window.innerWidth
+    const viewportHeight = window.innerHeight
+    const width = Math.max(300, Math.min(520, viewportWidth - margin * 2))
+    const maxLeft = Math.max(margin, viewportWidth - width - margin)
+    const left = Math.min(Math.max(rect.right - width, margin), maxLeft)
+    const availableBelow = viewportHeight - rect.bottom - gap - margin
+    const availableAbove = rect.top - gap - margin
+    const placeAbove = availableBelow < 260 && availableAbove > availableBelow
+    const availableHeight = Math.max(
+      160,
+      placeAbove ? availableAbove : availableBelow,
+    )
+    const maxHeight = Math.min(560, availableHeight)
+    const top = placeAbove
+      ? Math.max(margin, rect.top - gap - maxHeight)
+      : Math.max(
+          margin,
+          Math.min(rect.bottom + gap, viewportHeight - maxHeight - margin),
+        )
+
+    setPosition({ left, maxHeight, top, width })
+  }, [triggerRef])
+
+  useEffect(() => {
+    if (!open) {
+      setPosition(null)
+      return
+    }
+
+    updatePosition()
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        onClose()
+      }
+    }
+
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target
+
+      if (!(target instanceof Node)) {
+        return
+      }
+
+      if (
+        popoverRef.current?.contains(target) ||
+        triggerRef.current?.contains(target)
+      ) {
+        return
+      }
+
+      onClose()
+    }
+
+    document.addEventListener("keydown", handleKeyDown)
+    document.addEventListener("pointerdown", handlePointerDown)
+    document.addEventListener("scroll", updatePosition, true)
+    window.addEventListener("resize", updatePosition)
+
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown)
+      document.removeEventListener("pointerdown", handlePointerDown)
+      document.removeEventListener("scroll", updatePosition, true)
+      window.removeEventListener("resize", updatePosition)
+    }
+  }, [onClose, open, triggerRef, updatePosition])
+
+  if (!open || position === null || typeof document === "undefined") {
+    return null
+  }
+
+  const style: CSSProperties = {
+    left: position.left,
+    maxHeight: position.maxHeight,
+    top: position.top,
+    width: position.width,
+  }
+
+  return createPortal(
+    <div
+      aria-labelledby={`${popoverId}-title`}
+      aria-modal="false"
+      className="fixed z-50 flex flex-col overflow-hidden rounded-lg border border-border bg-popover text-popover-foreground shadow-2xl ring-1 ring-black/5"
+      id={popoverId}
+      ref={popoverRef}
+      role="dialog"
+      style={style}
+    >
+      <div className="flex shrink-0 items-start justify-between gap-3 border-b border-border p-4">
         <PanelHeader
           detail={
             loadedAt
               ? `快照已加载 ${formatTimestamp(loadedAt)}`
-              : "单次资源快照"
+              : service
+                ? service.container_name
+                : "单次资源快照"
           }
           icon={Cpu}
           title="Docker 统计"
+          titleId={`${popoverId}-title`}
         />
-        <button
-          type="button"
-          className="inline-flex h-9 items-center gap-2 rounded-md border border-border bg-card px-3 text-sm font-semibold text-card-foreground hover:bg-muted disabled:cursor-not-allowed disabled:opacity-70"
-          disabled={!service || busy}
-          onClick={onRefresh}
-        >
-          <RefreshCw
-            aria-hidden="true"
-            className={cn("size-4", busy && "animate-spin")}
-          />
-          刷新
-        </button>
-      </div>
-      {busy ? (
-        <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-sky-100">
-          <div className="h-full w-1/2 animate-pulse rounded-full bg-sky-600" />
+        <div className="flex shrink-0 items-center gap-2">
+          <button
+            type="button"
+            className="inline-flex h-9 items-center gap-2 rounded-md border border-border bg-card px-3 text-sm font-semibold text-card-foreground hover:bg-muted disabled:cursor-not-allowed disabled:opacity-70"
+            disabled={!service || busy}
+            onClick={onRefresh}
+          >
+            <RefreshCw
+              aria-hidden="true"
+              className={cn("size-4", busy && "animate-spin")}
+            />
+            刷新
+          </button>
+          <button
+            type="button"
+            aria-label="关闭 Docker 统计浮层"
+            className="inline-flex size-9 items-center justify-center rounded-md border border-border bg-card text-card-foreground hover:bg-muted"
+            onClick={onClose}
+          >
+            <X aria-hidden="true" className="size-4" />
+          </button>
         </div>
-      ) : null}
-      {error ? <PanelError error={error} /> : null}
-      {stats ? (
-        <dl className="mt-4 grid grid-cols-2 gap-3 text-sm">
-          <DetailItem label="CPU" value={formatPercent(stats.cpu_percent)} />
-          <DetailItem
-            label="内存"
-            value={`${formatBytes(stats.memory_usage_bytes)} / ${formatBytes(
-              stats.memory_limit_bytes,
-            )}`}
-          />
-          <DetailItem
-            label="内存占比"
-            value={formatPercent(stats.memory_percent)}
-          />
-          <DetailItem
-            label="网络接收"
-            value={formatBytes(stats.network_rx_bytes)}
-          />
-          <DetailItem
-            label="网络发送"
-            value={formatBytes(stats.network_tx_bytes)}
-          />
-          <DetailItem
-            label="块读取"
-            value={formatBytes(stats.block_read_bytes)}
-          />
-          <DetailItem
-            label="块写入"
-            value={formatBytes(stats.block_write_bytes)}
-          />
-          <DetailItem label="PIDs" value={stats.pids_current.toString()} />
-        </dl>
-      ) : busy ? (
-        <EmptyPanelText text="正在刷新 Docker 统计快照。" />
-      ) : (
-        <EmptyPanelText text="选择已注册服务后加载一次 Docker 统计快照。" />
-      )}
-    </section>
+      </div>
+
+      <div className="min-h-0 flex-1 overflow-y-auto p-4">
+        {busy ? (
+          <div className="h-1.5 overflow-hidden rounded-full bg-sky-100">
+            <div className="h-full w-1/2 animate-pulse rounded-full bg-sky-600" />
+          </div>
+        ) : null}
+        {error ? <PanelError error={error} /> : null}
+        {stats ? (
+          <dl className="mt-4 grid grid-cols-2 gap-3 text-sm">
+            <DetailItem label="CPU" value={formatPercent(stats.cpu_percent)} />
+            <DetailItem
+              label="内存"
+              value={`${formatBytes(stats.memory_usage_bytes)} / ${formatBytes(
+                stats.memory_limit_bytes,
+              )}`}
+            />
+            <DetailItem
+              label="内存占比"
+              value={formatPercent(stats.memory_percent)}
+            />
+            <DetailItem
+              label="网络接收"
+              value={formatBytes(stats.network_rx_bytes)}
+            />
+            <DetailItem
+              label="网络发送"
+              value={formatBytes(stats.network_tx_bytes)}
+            />
+            <DetailItem
+              label="块读取"
+              value={formatBytes(stats.block_read_bytes)}
+            />
+            <DetailItem
+              label="块写入"
+              value={formatBytes(stats.block_write_bytes)}
+            />
+            <DetailItem label="PIDs" value={stats.pids_current.toString()} />
+          </dl>
+        ) : busy ? (
+          <EmptyPanelText text="正在刷新 Docker 统计快照。" />
+        ) : (
+          <EmptyPanelText text="后端未返回 Docker 统计快照。" />
+        )}
+      </div>
+    </div>,
+    document.body,
   )
 }
 
@@ -3218,14 +3834,19 @@ function PanelHeader({
   detail,
   icon: Icon,
   title,
+  titleId,
 }: {
   detail: string
   icon: LucideIcon
   title: string
+  titleId?: string
 }) {
   return (
-    <div>
-      <h3 className="flex items-center gap-2 text-base font-semibold text-card-foreground">
+    <div className="min-w-0">
+      <h3
+        className="flex items-center gap-2 text-base font-semibold text-card-foreground"
+        id={titleId}
+      >
         <Icon aria-hidden="true" className="size-4" />
         {title}
       </h3>
@@ -3290,10 +3911,8 @@ function filterServices(services: ServiceStatus[], filters: ServiceFilterState) 
     const categoryMatches =
       filters.category === allFilterValue ||
       service.category === filters.category
-    const riskMatches =
-      filters.risk === allFilterValue || service.risk_level === filters.risk
 
-    return statusMatches && categoryMatches && riskMatches
+    return statusMatches && categoryMatches
   })
 }
 
@@ -3494,10 +4113,6 @@ function formatResetOriginFieldLabel(
 
 function formatOverallLevel(level: OverallLevel) {
   return overallLabels[level]
-}
-
-function formatRiskLevel(riskLevel: ServiceRiskLevel) {
-  return riskLabels[riskLevel]
 }
 
 function formatDockerState(state: DockerState) {

@@ -6,7 +6,7 @@ import type {
   ServiceLogWebSocketMessage,
 } from "@/types/management"
 
-export const DEFAULT_SERVICE_LOG_TAIL = 1000
+export const DEFAULT_SERVICE_LOG_TAIL = 200
 export const MAX_REQUESTED_SERVICE_LOG_TAIL = 1000
 
 export function normalizeServiceLogTail(value: number) {

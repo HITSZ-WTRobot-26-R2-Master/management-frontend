@@ -253,7 +253,7 @@ describe("management API URL helpers", () => {
           },
         ),
       ).toBe(
-        "wss://operator.local/management-api/ws/services/lidar%2Fpose%20publisher/logs?token=token+value&tail=1000&stdout=false&stderr=true&timestamps=false",
+        "wss://operator.local/management-api/ws/services/lidar%2Fpose%20publisher/logs?token=token+value&tail=200&stdout=false&stderr=true&timestamps=false",
       )
     } finally {
       Object.defineProperty(globalThis, "location", {
@@ -358,9 +358,9 @@ describe("chassis state API contract", () => {
 })
 
 describe("service log stream helpers", () => {
-  test("uses 1000 as the frontend default service log tail", () => {
-    expect(DEFAULT_SERVICE_LOG_TAIL).toBe(1000)
-    expect(normalizeServiceLogTail(Number.NaN)).toBe(1000)
+  test("uses 200 as the frontend default service log tail", () => {
+    expect(DEFAULT_SERVICE_LOG_TAIL).toBe(200)
+    expect(normalizeServiceLogTail(Number.NaN)).toBe(200)
   })
 
   test("validates service log WebSocket contract messages", () => {
