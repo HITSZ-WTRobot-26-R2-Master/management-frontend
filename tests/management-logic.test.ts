@@ -1,4 +1,14 @@
 import { describe, expect, test } from "bun:test"
+import {
+  formatChassisCurveFinished,
+  formatChassisMode,
+  formatChassisStepStatus,
+  formatGripStatus,
+  formatGripSuctionHasObject,
+  formatInfraredReceiverState,
+  formatLiftStatus,
+  getChassisActionStateDisplayFields,
+} from "../src/lib/chassis-action-state-display"
 import { getCommandConfirmationState } from "../src/lib/command-confirmation"
 import {
   DEFAULT_RESET_ORIGIN_PAYLOAD,
@@ -39,6 +49,7 @@ import {
 } from "../src/lib/service-not-found-recovery"
 import { formatBytes, formatPercent } from "../src/lib/resource-format"
 import {
+  formatHexWord,
   formatMillimeterPrecision,
   formatReadableDurationMs,
   formatRosTime,
@@ -388,6 +399,44 @@ describe("chassis state API contract", () => {
       }),
     ).toBe(false)
   })
+
+  test("formats chassis action state protocol enum names", () => {
+    const action = chassisStateSnapshot().message.action
+
+    expect(formatChassisStepStatus(action.step_status)).toBe("Done")
+    expect(formatChassisMode(action.chassis_mode)).toBe("Position")
+    expect(formatChassisCurveFinished(action.chassis_curve_finished)).toBe(
+      "Finished",
+    )
+    expect(formatLiftStatus(action.lift_status)).toBe("NotEnabled")
+    expect(formatGripStatus(action.grip_status)).toBe("Idle")
+    expect(formatGripSuctionHasObject(action.grip_suction_has_object)).toBe(
+      "NoObject",
+    )
+    expect(formatInfraredReceiverState(action.infrared_receiver_state)).toBe(
+      "A2",
+    )
+    expect(getChassisActionStateDisplayFields(action)).toEqual([
+      ["raw_table", "0x1234"],
+      ["step_status", "Done"],
+      ["chassis_mode", "Position"],
+      ["chassis_curve_finished", "Finished"],
+      ["lift_status", "NotEnabled"],
+      ["grip_status", "Idle"],
+      ["grip_suction_has_object", "NoObject"],
+      ["infrared_receiver_state", "A2"],
+    ])
+  })
+
+  test("formats unknown chassis action state values with stable fallbacks", () => {
+    expect(formatChassisStepStatus(4)).toBe("Unknown(4)")
+    expect(formatChassisMode(7)).toBe("Unknown(7)")
+    expect(formatLiftStatus(Number.NaN)).toBe("Unknown(NaN)")
+    expect(formatGripStatus(6)).toBe("Unknown(6)")
+    expect(formatInfraredReceiverState(-1)).toBe("Unknown(-1)")
+    expect(formatChassisCurveFinished(false)).toBe("Unfinished")
+    expect(formatGripSuctionHasObject(true)).toBe("HasObject")
+  })
 })
 
 describe("master-control pose API contract", () => {
@@ -605,6 +654,12 @@ describe("resource display formatting", () => {
     expect(formatMillimeterPrecision(1)).toBe("1.000")
     expect(formatMillimeterPrecision(-0.0014)).toBe("-0.001")
     expect(formatMillimeterPrecision(Number.NaN)).toBe("缺失")
+  })
+
+  test("formats protocol table values as uppercase hex words", () => {
+    expect(formatHexWord(0x1234)).toBe("0x1234")
+    expect(formatHexWord(10.9)).toBe("0x000A")
+    expect(formatHexWord(-1)).toBe("0x0000")
   })
 
   test("formats MCU millisecond durations as readable operator text", () => {

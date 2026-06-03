@@ -13,13 +13,23 @@ import type { ReactNode } from "react"
 import type { LucideIcon } from "lucide-react"
 import type { ChassisStateStreamState } from "@/hooks/useChassisStateStream"
 import {
+  formatChassisCurveFinished,
+  formatChassisMode,
+  formatChassisStepStatus,
+  formatGripStatus,
+  formatGripSuctionHasObject,
+  formatInfraredReceiverState,
+  formatLiftStatus,
+  getChassisActionStateDisplayFields,
+} from "@/lib/chassis-action-state-display"
+import {
+  formatHexWord,
   formatMillimeterPrecision,
   formatReadableDurationMs,
 } from "@/lib/display-format"
 import { cn } from "@/lib/utils"
 import type {
   ApiError,
-  ChassisActionState,
   ChassisConnectionState,
   ChassisPoseState,
   ChassisStateMessage,
@@ -148,21 +158,39 @@ export function ChassisStateCard({
               </div>
 
               <div className="mt-3 grid gap-2 lg:grid-cols-4">
-                <CompactField label="底盘模式" value={message.action.chassis_mode} />
-                <CompactField label="路径状态" value={message.action.step_status} />
-                <CompactField label="升降状态" value={message.action.lift_status} />
-                <CompactField label="夹爪状态" value={message.action.grip_status} />
+                <CompactField
+                  label="底盘模式"
+                  value={formatChassisMode(message.action.chassis_mode)}
+                />
+                <CompactField
+                  label="路径状态"
+                  value={formatChassisStepStatus(message.action.step_status)}
+                />
+                <CompactField
+                  label="升降状态"
+                  value={formatLiftStatus(message.action.lift_status)}
+                />
+                <CompactField
+                  label="夹爪状态"
+                  value={formatGripStatus(message.action.grip_status)}
+                />
                 <CompactField
                   label="曲线完成"
-                  value={message.action.chassis_curve_finished ? "是" : "否"}
+                  value={formatChassisCurveFinished(
+                    message.action.chassis_curve_finished,
+                  )}
                 />
                 <CompactField
                   label="吸附检测"
-                  value={message.action.grip_suction_has_object ? "有物" : "无物"}
+                  value={formatGripSuctionHasObject(
+                    message.action.grip_suction_has_object,
+                  )}
                 />
                 <CompactField
                   label="红外状态"
-                  value={message.action.infrared_receiver_state}
+                  value={formatInfraredReceiverState(
+                    message.action.infrared_receiver_state,
+                  )}
                 />
                 <CompactField
                   label="MCU 时间"
@@ -313,7 +341,10 @@ function ChassisStateDetails({ message }: { message: ChassisStateMessage }) {
   return (
     <div className="grid min-h-0 gap-4 overflow-y-auto p-4">
       <DetailGroup title="Pose" values={poseFields(message.pose)} />
-      <DetailGroup title="Action" values={actionFields(message.action)} />
+      <DetailGroup
+        title="Action"
+        values={getChassisActionStateDisplayFields(message.action)}
+      />
       <DetailGroup title="Connection" values={connectionFields(message.connection)} />
     </div>
   )
@@ -411,22 +442,9 @@ function poseFields(pose: ChassisPoseState): Array<[string, string]> {
   ]
 }
 
-function actionFields(action: ChassisActionState) {
-  return [
-    ["raw_table", formatHex(action.raw_table)],
-    ["step_status", action.step_status],
-    ["chassis_mode", action.chassis_mode],
-    ["chassis_curve_finished", action.chassis_curve_finished],
-    ["lift_status", action.lift_status],
-    ["grip_status", action.grip_status],
-    ["grip_suction_has_object", action.grip_suction_has_object],
-    ["infrared_receiver_state", action.infrared_receiver_state],
-  ] satisfies Array<[string, boolean | number | string]>
-}
-
 function connectionFields(connection: ChassisConnectionState) {
   return [
-    ["raw_table", formatHex(connection.raw_table)],
+    ["raw_table", formatHexWord(connection.raw_table)],
     ["wheel_0", connection.wheel_0],
     ["wheel_1", connection.wheel_1],
     ["wheel_2", connection.wheel_2],
@@ -495,10 +513,6 @@ function NoWrapValue({ children }: { children: ReactNode }) {
 
 function formatAngle(value: number) {
   return Number.isFinite(value) ? value.toFixed(2) : "缺失"
-}
-
-function formatHex(value: number) {
-  return `0x${Math.max(0, Math.trunc(value)).toString(16).toUpperCase().padStart(4, "0")}`
 }
 
 function ageFromIso(value: string | null) {

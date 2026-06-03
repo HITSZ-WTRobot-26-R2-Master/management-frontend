@@ -9,6 +9,10 @@ export function formatMillimeterPrecision(value: number) {
   return Number.isFinite(value) ? value.toFixed(3) : "缺失"
 }
 
+export function formatHexWord(value: number) {
+  return `0x${Math.max(0, Math.trunc(value)).toString(16).toUpperCase().padStart(4, "0")}`
+}
+
 export function formatReadableDurationMs(value: number) {
   if (!Number.isFinite(value)) {
     return "时间未知"
