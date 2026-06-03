@@ -9,6 +9,7 @@ import {
 import { useMemo } from "react"
 import type { LucideIcon } from "lucide-react"
 import type { MasterControlPoseStreamState } from "@/hooks/useMasterControlPoseStream"
+import { formatMillimeterPrecision, formatRosTime } from "@/lib/display-format"
 import { cn } from "@/lib/utils"
 import type {
   ApiError,
@@ -50,7 +51,7 @@ export function MasterControlPoseCard({
           <h2 className="text-base font-semibold text-card-foreground">
             主控定位
           </h2>
-          <p className="mt-1 truncate text-sm text-muted-foreground">
+          <p className="mt-1 break-words text-sm text-muted-foreground">
             {summary.subtitle}
           </p>
         </div>
@@ -69,7 +70,7 @@ export function MasterControlPoseCard({
           <StatePill tone={summary.tone} icon={summary.icon}>
             {summary.label}
           </StatePill>
-          <span className="text-sm text-muted-foreground">
+          <span className="min-w-0 break-words text-sm text-muted-foreground">
             {summary.detail}
           </span>
         </div>
@@ -152,10 +153,10 @@ function PoseSourceBlock({
     <div className="min-w-0 rounded-md border border-border bg-muted/45 px-2.5 py-2">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <p className="truncate text-xs font-medium text-muted-foreground">
+          <p className="break-words text-xs font-medium text-muted-foreground">
             {label}
           </p>
-          <p className="mt-0.5 truncate text-sm font-semibold text-card-foreground">
+          <p className="mt-0.5 break-words text-sm font-semibold text-card-foreground">
             {frameLabel}
           </p>
         </div>
@@ -164,20 +165,28 @@ function PoseSourceBlock({
 
       {message ? (
         <>
-          <p className="mt-1.5 truncate font-mono text-sm font-semibold tracking-normal text-card-foreground">
-            X {formatNumber(message.x)} / Y {formatNumber(message.y)} / Z{" "}
-            {formatNumber(message.z)}
-          </p>
-          <p className="mt-1 truncate text-xs text-muted-foreground">
-            R {formatNumber(message.roll_deg)} / P{" "}
-            {formatNumber(message.pitch_deg)} / Y {formatNumber(message.yaw_deg)} deg
-          </p>
-          <p className="mt-1 truncate text-xs text-muted-foreground">
-            {frameDetail} · {formatRosStamp(message)}
+          <div className="mt-2 flex flex-wrap gap-1.5 font-mono text-sm font-semibold tracking-normal text-card-foreground">
+            <PoseAxisValue axis="X" value={message.x} />
+            <PoseAxisValue axis="Y" value={message.y} />
+            <PoseAxisValue axis="Z" value={message.z} />
+          </div>
+          <div className="mt-1 flex flex-wrap gap-x-1.5 gap-y-0.5 text-xs text-muted-foreground">
+            <PoseAngleValue axis="R" value={message.roll_deg} />
+            <span aria-hidden="true">/</span>
+            <PoseAngleValue axis="P" value={message.pitch_deg} />
+            <span aria-hidden="true">/</span>
+            <PoseAngleValue axis="Y" value={message.yaw_deg} />
+          </div>
+          <p className="mt-1 text-xs text-muted-foreground">
+            <span className="break-words">{frameDetail}</span>{" "}
+            <span aria-hidden="true">·</span>{" "}
+            <span className="whitespace-nowrap break-normal">
+              {formatRosTime(message.header.stamp)}
+            </span>
           </p>
         </>
       ) : (
-        <p className="mt-2 truncate text-sm text-muted-foreground">
+        <p className="mt-2 break-words text-sm text-muted-foreground">
           等待 {source.topic}
         </p>
       )}
@@ -267,13 +276,29 @@ function latestPoseReceivedAt(snapshot: MasterControlPoseSnapshot) {
   return latestValue ?? receivedAtValues[0] ?? null
 }
 
-function formatRosStamp(message: PoseMessage) {
-  return `ROS ${message.header.stamp.sec}.${String(
-    message.header.stamp.nanosec,
-  ).padStart(9, "0")}`
+function PoseAxisValue({ axis, value }: { axis: "X" | "Y" | "Z"; value: number }) {
+  return (
+    <span className="whitespace-nowrap break-normal rounded-sm bg-card/70 px-1.5 py-1">
+      {axis} {formatMillimeterPrecision(value)} m
+    </span>
+  )
 }
 
-function formatNumber(value: number, digits = 2) {
+function PoseAngleValue({
+  axis,
+  value,
+}: {
+  axis: "R" | "P" | "Y"
+  value: number
+}) {
+  return (
+    <span className="whitespace-nowrap break-normal">
+      {axis} {formatAngle(value)} deg
+    </span>
+  )
+}
+
+function formatAngle(value: number, digits = 2) {
   return Number.isFinite(value) ? value.toFixed(digits) : "缺失"
 }
 

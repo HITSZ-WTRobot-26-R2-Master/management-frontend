@@ -39,6 +39,11 @@ import {
 } from "../src/lib/service-not-found-recovery"
 import { formatBytes, formatPercent } from "../src/lib/resource-format"
 import {
+  formatMillimeterPrecision,
+  formatReadableDurationMs,
+  formatRosTime,
+} from "../src/lib/display-format"
+import {
   formatRosSummary,
   getToneForOverallLevel,
 } from "../src/lib/status-presentation"
@@ -594,6 +599,31 @@ describe("resource display formatting", () => {
   test("returns a visible fallback for non-finite byte values", () => {
     expect(formatBytes(Number.NaN)).toBe("未上报")
     expect(formatBytes(Number.POSITIVE_INFINITY)).toBe("未上报")
+  })
+
+  test("formats meter values with millimeter precision", () => {
+    expect(formatMillimeterPrecision(1)).toBe("1.000")
+    expect(formatMillimeterPrecision(-0.0014)).toBe("-0.001")
+    expect(formatMillimeterPrecision(Number.NaN)).toBe("缺失")
+  })
+
+  test("formats MCU millisecond durations as readable operator text", () => {
+    expect(formatReadableDurationMs(123)).toBe("123 ms")
+    expect(formatReadableDurationMs(1234)).toBe("1.23 s")
+    expect(formatReadableDurationMs(62_000)).toBe("1 分 02 秒")
+    expect(formatReadableDurationMs(3_661_000)).toBe("1 小时 01 分 01 秒")
+  })
+
+  test("formats ROS stamps as readable wall-clock times", () => {
+    expect(formatRosTime({ sec: 0, nanosec: 123_000_000 })).toMatch(
+      /^ROS \d{2}:\d{2}:\d{2}\.123$/,
+    )
+    expect(formatRosTime({ sec: 1, nanosec: 999_999_999 })).toMatch(
+      /^ROS \d{2}:\d{2}:\d{2}\.999$/,
+    )
+    expect(formatRosTime({ sec: 1, nanosec: 1_000_000_000 })).toBe(
+      "ROS 时间 1.1000000000",
+    )
   })
 })
 

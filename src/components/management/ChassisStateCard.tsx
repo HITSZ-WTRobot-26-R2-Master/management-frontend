@@ -9,8 +9,13 @@ import {
   X,
 } from "lucide-react"
 import { useCallback, useEffect, useMemo, useState } from "react"
+import type { ReactNode } from "react"
 import type { LucideIcon } from "lucide-react"
 import type { ChassisStateStreamState } from "@/hooks/useChassisStateStream"
+import {
+  formatMillimeterPrecision,
+  formatReadableDurationMs,
+} from "@/lib/display-format"
 import { cn } from "@/lib/utils"
 import type {
   ApiError,
@@ -75,7 +80,7 @@ export function ChassisStateCard({
             <h2 className="text-base font-semibold text-card-foreground">
               底盘状态
             </h2>
-            <p className="mt-1 truncate text-sm text-muted-foreground">
+            <p className="mt-1 break-words text-sm text-muted-foreground">
               {summary.subtitle}
             </p>
           </div>
@@ -104,7 +109,7 @@ export function ChassisStateCard({
             <StatePill tone={summary.tone} icon={summary.icon}>
               {summary.label}
             </StatePill>
-            <span className="text-sm text-muted-foreground">
+            <span className="min-w-0 break-words text-sm text-muted-foreground">
               {summary.detail}
             </span>
           </div>
@@ -115,17 +120,23 @@ export function ChassisStateCard({
                 <SummaryMetric
                   icon={Route}
                   label="位置"
-                  value={`${formatNumber(message.pose.x)} / ${formatNumber(
-                    message.pose.y,
-                  )}`}
-                  detail={`航向 ${formatNumber(message.pose.yaw_deg)} deg`}
+                  value={
+                    <ChassisPoseSummary
+                      pose={message.pose}
+                    />
+                  }
+                  detail="底盘位姿"
                 />
                 <SummaryMetric
                   icon={Gauge}
                   label="高度"
-                  value={`${formatNumber(
-                    message.pose.front_height,
-                  )} / ${formatNumber(message.pose.rear_height)}`}
+                  value={
+                    <MetricPair
+                      first={formatMillimeterPrecision(message.pose.front_height)}
+                      second={formatMillimeterPrecision(message.pose.rear_height)}
+                      unit="m"
+                    />
+                  }
                   detail="前 / 后"
                 />
                 <SummaryMetric
@@ -155,7 +166,11 @@ export function ChassisStateCard({
                 />
                 <CompactField
                   label="MCU 时间"
-                  value={`${message.timestamp_ms} ms`}
+                  value={
+                    <NoWrapValue>
+                      MCU {formatReadableDurationMs(message.timestamp_ms)}
+                    </NoWrapValue>
+                  }
                 />
               </div>
             </>
@@ -204,10 +219,10 @@ function SummaryMetric({
   label,
   value,
 }: {
-  detail: string
+  detail: ReactNode
   icon: LucideIcon
   label: string
-  value: string
+  value: ReactNode
 }) {
   return (
     <div className="min-w-0 rounded-md border border-border bg-muted/45 p-2.5">
@@ -215,10 +230,10 @@ function SummaryMetric({
         <Icon aria-hidden="true" className="size-4 text-primary" />
         {label}
       </div>
-      <p className="mt-1.5 truncate text-base font-semibold tracking-normal text-card-foreground">
+      <p className="mt-1.5 break-words text-base font-semibold tracking-normal text-card-foreground">
         {value}
       </p>
-      <p className="mt-1 truncate text-xs text-muted-foreground">{detail}</p>
+      <p className="mt-1 break-words text-xs text-muted-foreground">{detail}</p>
     </div>
   )
 }
@@ -228,13 +243,13 @@ function CompactField({
   value,
 }: {
   label: string
-  value: boolean | number | string
+  value: ReactNode
 }) {
   return (
     <div className="min-w-0 rounded-md border border-border bg-card px-2.5 py-1.5">
-      <p className="truncate text-xs text-muted-foreground">{label}</p>
-      <p className="mt-1 truncate text-sm font-semibold text-card-foreground">
-        {String(value)}
+      <p className="break-words text-xs text-muted-foreground">{label}</p>
+      <p className="mt-1 break-words text-sm font-semibold text-card-foreground">
+        {value}
       </p>
     </div>
   )
@@ -275,8 +290,8 @@ function ChassisStateDetailsDrawer({
             >
               底盘状态详情
             </h3>
-            <p className="mt-1 truncate text-sm text-muted-foreground">
-              MCU {message.timestamp_ms} ms
+            <p className="mt-1 break-words text-sm text-muted-foreground">
+              MCU {formatReadableDurationMs(message.timestamp_ms)}
             </p>
           </div>
           <button
@@ -320,9 +335,9 @@ function DetailGroup({
             className="grid grid-cols-[minmax(110px,0.8fr)_minmax(0,1fr)] gap-3 text-sm"
             key={label}
           >
-            <dt className="truncate text-muted-foreground">{label}</dt>
-            <dd className="min-w-0 truncate font-mono text-card-foreground">
-              {String(value)}
+            <dt className="break-words text-muted-foreground">{label}</dt>
+            <dd className="min-w-0 break-words font-mono text-card-foreground">
+              <NoWrapValue>{String(value)}</NoWrapValue>
             </dd>
           </div>
         ))}
@@ -379,18 +394,20 @@ function summarizeChassisState(
     emptyText: "",
     icon: stale ? AlertTriangle : CheckCircle2,
     label: stale ? "反馈过期" : status === "fallback" ? "REST 回退" : "实时反馈",
-    subtitle: `${snapshot.topic} / MCU ${snapshot.message.timestamp_ms} ms`,
+    subtitle: `${snapshot.topic} / MCU ${formatReadableDurationMs(
+      snapshot.message.timestamp_ms,
+    )}`,
     tone: stale ? ("warning" as const) : ("success" as const),
   }
 }
 
-function poseFields(pose: ChassisPoseState): Array<[string, number]> {
+function poseFields(pose: ChassisPoseState): Array<[string, string]> {
   return [
-    ["x", pose.x],
-    ["y", pose.y],
-    ["yaw_deg", pose.yaw_deg],
-    ["front_height", pose.front_height],
-    ["rear_height", pose.rear_height],
+    ["x", formatMillimeterPrecision(pose.x)],
+    ["y", formatMillimeterPrecision(pose.y)],
+    ["yaw_deg", formatAngle(pose.yaw_deg)],
+    ["front_height", formatMillimeterPrecision(pose.front_height)],
+    ["rear_height", formatMillimeterPrecision(pose.rear_height)],
   ]
 }
 
@@ -440,7 +457,43 @@ function connectionIssueSummary(connection: ChassisConnectionState) {
   return offline.length === 0 ? "全部在线" : `离线 ${offline.slice(0, 2).join(", ")}`
 }
 
-function formatNumber(value: number) {
+function MetricPair({
+  first,
+  second,
+  unit,
+}: {
+  first: string
+  second: string
+  unit: string
+}) {
+  return (
+    <span className="flex flex-wrap gap-x-1.5 gap-y-0.5">
+      <NoWrapValue>
+        {first} {unit}
+      </NoWrapValue>
+      <span aria-hidden="true">/</span>
+      <NoWrapValue>
+        {second} {unit}
+      </NoWrapValue>
+    </span>
+  )
+}
+
+function ChassisPoseSummary({ pose }: { pose: ChassisPoseState }) {
+  return (
+    <span className="grid gap-0.5">
+      <NoWrapValue>X {formatMillimeterPrecision(pose.x)} m</NoWrapValue>
+      <NoWrapValue>Y {formatMillimeterPrecision(pose.y)} m</NoWrapValue>
+      <NoWrapValue>Yaw {formatAngle(pose.yaw_deg)} deg</NoWrapValue>
+    </span>
+  )
+}
+
+function NoWrapValue({ children }: { children: ReactNode }) {
+  return <span className="whitespace-nowrap break-normal">{children}</span>
+}
+
+function formatAngle(value: number) {
   return Number.isFinite(value) ? value.toFixed(2) : "缺失"
 }
 
