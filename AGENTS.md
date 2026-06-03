@@ -27,6 +27,12 @@ shadcn/ui, and Jotai. Generate shadcn/ui files with `bunx shadcn@latest ...`
 when adding UI primitives; do not hand-write generated files under
 `src/components/ui`.
 
+When the shadcn registry already provides a suitable component for a standard
+accessible UI primitive, prefer adding that shadcn component over hand-writing
+an equivalent interaction. Use `bunx shadcn@latest add <component>` for these
+additions, and run the command with escalated permissions because it resolves
+component dependencies and may write package-manager caches.
+
 Quality gates are Bun scripts:
 
 - `bun run typecheck`
