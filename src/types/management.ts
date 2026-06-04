@@ -318,41 +318,32 @@ export interface MasterControlPoseSnapshot {
   odin_odometry: PoseSourceSnapshot<OdinOdometryPoseMessage>
 }
 
+export interface DashboardSnapshot {
+  services: ServiceStatus[]
+  chassis_state: ChassisStateSnapshot | null
+  master_control_pose: MasterControlPoseSnapshot | null
+}
+
 export type BlockStateValue = 0 | 1 | 2 | 3 | 4
 
-export interface ChassisStateSnapshotMessage {
-  type: "chassis_state_snapshot"
+export interface DashboardSnapshotMessage {
+  type: "dashboard_snapshot"
+  seq: number
   time: string
-  snapshot: ChassisStateSnapshot
+  snapshot: DashboardSnapshot
 }
 
-export interface ChassisStateErrorMessage {
-  type: "chassis_state_error"
-  time: string
-  code: ApiErrorCode
-  message: string
-}
-
-export type ChassisStateWebSocketMessage =
-  | ChassisStateSnapshotMessage
-  | ChassisStateErrorMessage
-
-export interface MasterControlPoseSnapshotMessage {
-  type: "master_control_pose_snapshot"
-  time: string
-  snapshot: MasterControlPoseSnapshot
-}
-
-export interface MasterControlPoseErrorMessage {
-  type: "master_control_pose_error"
+export interface DashboardErrorMessage {
+  type: "dashboard_error"
+  seq: number
   time: string
   code: ApiErrorCode
   message: string
 }
 
-export type MasterControlPoseWebSocketMessage =
-  | MasterControlPoseSnapshotMessage
-  | MasterControlPoseErrorMessage
+export type DashboardWebSocketMessage =
+  | DashboardSnapshotMessage
+  | DashboardErrorMessage
 
 export interface RestartRequest {
   mode: "hard"

@@ -17,18 +17,15 @@ import {
   toResetOriginJsonPayload,
   writeResetOriginSessionPayload,
 } from "../src/lib/reset-origin-payload"
-import { reduceServiceStatusesForEvent } from "../src/lib/event-reducer"
 import {
   buildManagementHttpUrl,
-  buildManagementWebSocketUrl,
-  buildChassisStateWebSocketUrl,
-  buildMasterControlPoseWebSocketUrl,
+  buildDashboardWebSocketUrl,
   buildBlockStatesWebSocketUrl,
   buildServiceLogWebSocketUrl,
   isChassisStateSnapshot,
-  isChassisStateWebSocketMessage,
+  isDashboardSnapshot,
+  isDashboardWebSocketMessage,
   isMasterControlPoseSnapshot,
-  isMasterControlPoseWebSocketMessage,
   isAbortError,
   isServiceStatus,
   isValidManagementBaseUrl,
@@ -62,7 +59,6 @@ import {
 import { getServiceDiagnosticGroups } from "../src/lib/service-diagnostics"
 import type {
   CommandDefinition,
-  ManagementEvent,
   ServiceStatus,
 } from "../src/types/management"
 
@@ -229,7 +225,7 @@ describe("management API URL helpers", () => {
     )
   })
 
-  test("builds WebSocket URLs for the same-origin development proxy", () => {
+  test("builds dashboard WebSocket URLs for the same-origin development proxy", () => {
     const previousLocation = globalThis.location
 
     Object.defineProperty(globalThis, "location", {
@@ -241,8 +237,10 @@ describe("management API URL helpers", () => {
 
     try {
       expect(
-        buildManagementWebSocketUrl("/management-api", "change-me"),
-      ).toBe("ws://127.0.0.1:5173/management-api/ws/events?token=change-me")
+        buildDashboardWebSocketUrl("/management-api", "change-me"),
+      ).toBe(
+        "ws://127.0.0.1:5173/management-api/ws/dashboard?token=change-me",
+      )
     } finally {
       Object.defineProperty(globalThis, "location", {
         configurable: true,
@@ -284,64 +282,16 @@ describe("management API URL helpers", () => {
     }
   })
 
-  test("builds chassis state WebSocket URLs with query token auth", () => {
-    const previousLocation = globalThis.location
-
-    Object.defineProperty(globalThis, "location", {
-      configurable: true,
-      value: {
-        origin: "http://127.0.0.1:5173",
-      },
-    })
-
-    try {
-      expect(
-        buildChassisStateWebSocketUrl("/management-api", "change-me"),
-      ).toBe(
-        "ws://127.0.0.1:5173/management-api/ws/chassis/state?token=change-me",
-      )
-    } finally {
-      Object.defineProperty(globalThis, "location", {
-        configurable: true,
-        value: previousLocation,
-      })
-    }
-  })
-
-  test("builds master-control pose WebSocket URLs with query token auth", () => {
-    const previousLocation = globalThis.location
-
-    Object.defineProperty(globalThis, "location", {
-      configurable: true,
-      value: {
-        origin: "http://127.0.0.1:5173",
-      },
-    })
-
-    try {
-      expect(
-        buildMasterControlPoseWebSocketUrl("/management-api", "change-me"),
-      ).toBe(
-        "ws://127.0.0.1:5173/management-api/ws/master-control/pose?token=change-me",
-      )
-    } finally {
-      Object.defineProperty(globalThis, "location", {
-        configurable: true,
-        value: previousLocation,
-      })
-    }
-  })
-
   test("builds block states WebSocket URLs with query token auth", () => {
     expect(
       buildBlockStatesWebSocketUrl("http://127.0.0.1:8080", "change-me"),
     ).toBe("ws://127.0.0.1:8080/ws/block-states?token=change-me")
   })
 
-  test("preserves the existing events WebSocket helper behavior", () => {
+  test("builds dashboard WebSocket URLs with query token auth", () => {
     expect(
-      buildManagementWebSocketUrl("http://127.0.0.1:8080", "change-me"),
-    ).toBe("ws://127.0.0.1:8080/ws/events?token=change-me")
+      buildDashboardWebSocketUrl("http://127.0.0.1:8080", "change-me"),
+    ).toBe("ws://127.0.0.1:8080/ws/dashboard?token=change-me")
   })
 
   test("accepts only HTTP(S) URLs or same-origin proxy paths", () => {
@@ -378,31 +328,6 @@ describe("chassis state API contract", () => {
             upper_host: "yes",
           },
         },
-      }),
-    ).toBe(false)
-  })
-
-  test("validates chassis state websocket messages", () => {
-    expect(
-      isChassisStateWebSocketMessage({
-        type: "chassis_state_snapshot",
-        time: "2026-06-02T02:30:00Z",
-        snapshot: chassisStateSnapshot(),
-      }),
-    ).toBe(true)
-    expect(
-      isChassisStateWebSocketMessage({
-        type: "chassis_state_error",
-        time: "2026-06-02T02:30:00Z",
-        code: "request_failed",
-        message: "agent unavailable",
-      }),
-    ).toBe(true)
-    expect(
-      isChassisStateWebSocketMessage({
-        type: "chassis_state_snapshot",
-        time: "2026-06-02T02:30:00Z",
-        snapshot: { available: true },
       }),
     ).toBe(false)
   })
@@ -487,27 +412,48 @@ describe("master-control pose API contract", () => {
     ).toBe(false)
   })
 
-  test("validates master-control pose websocket messages", () => {
+  test("validates dashboard websocket messages", () => {
     expect(
-      isMasterControlPoseWebSocketMessage({
-        type: "master_control_pose_snapshot",
-        time: "2026-06-03T02:30:00Z",
-        snapshot: masterControlPoseSnapshot(),
+      isDashboardWebSocketMessage({
+        type: "dashboard_snapshot",
+        seq: 1,
+        time: "2026-06-04T00:00:00Z",
+        snapshot: dashboardSnapshot(),
       }),
     ).toBe(true)
     expect(
-      isMasterControlPoseWebSocketMessage({
-        type: "master_control_pose_error",
-        time: "2026-06-03T02:30:00Z",
+      isDashboardWebSocketMessage({
+        type: "dashboard_error",
+        seq: 2,
+        time: "2026-06-04T00:00:01Z",
         code: "request_failed",
         message: "agent unavailable",
       }),
     ).toBe(true)
     expect(
-      isMasterControlPoseWebSocketMessage({
-        type: "master_control_pose_snapshot",
-        time: "2026-06-03T02:30:00Z",
-        snapshot: { available: true },
+      isDashboardWebSocketMessage({
+        type: "dashboard_snapshot",
+        seq: 0,
+        time: "2026-06-04T00:00:00Z",
+        snapshot: { services: [{}], chassis_state: null, master_control_pose: null },
+      }),
+    ).toBe(false)
+  })
+
+  test("validates dashboard snapshots with nullable dashboard sections", () => {
+    expect(isDashboardSnapshot(dashboardSnapshot())).toBe(true)
+    expect(
+      isDashboardSnapshot({
+        services: [makeServiceStatus()],
+        chassis_state: null,
+        master_control_pose: null,
+      }),
+    ).toBe(true)
+    expect(
+      isDashboardSnapshot({
+        services: [makeServiceStatus()],
+        chassis_state: { available: true },
+        master_control_pose: null,
       }),
     ).toBe(false)
   })
@@ -1094,76 +1040,6 @@ describe("reset_origin payload helpers", () => {
   })
 })
 
-describe("event reducer", () => {
-  test("replaces services from a status snapshot", () => {
-    const initial = [makeServiceStatus({ service_name: "arm_driver" })]
-    const next = [
-      makeServiceStatus({
-        display_name: "Lidar Pose Publisher",
-        service_name: "lidar_pose_publisher",
-      }),
-    ]
-
-    expect(
-      reduceServiceStatusesForEvent(initial, {
-        id: "event-1",
-        payload: { services: next },
-        time: "2026-05-30T12:00:00Z",
-        type: "service_status_snapshot",
-      }),
-    ).toEqual(next)
-  })
-
-  test("updates one changed service by logical service_name", () => {
-    const arm = makeServiceStatus({
-      display_name: "Arm Driver",
-      service_name: "arm_driver",
-    })
-    const lidar = makeServiceStatus({
-      display_name: "Lidar Pose Publisher",
-      service_name: "lidar_pose_publisher",
-    })
-    const changedLidar = makeServiceStatus({
-      display_name: "Lidar Pose Publisher",
-      overall: {
-        level: "warning",
-        reason: "agent_unavailable",
-      },
-      service_name: "lidar_pose_publisher",
-    })
-
-    expect(
-      reduceServiceStatusesForEvent([arm, lidar], {
-        id: "event-2",
-        payload: { service: changedLidar },
-        time: "2026-05-30T12:00:01Z",
-        type: "service_status_changed",
-      }),
-    ).toEqual([arm, changedLidar])
-  })
-
-  test("ignores unknown event types and malformed change payloads", () => {
-    const services = [makeServiceStatus({ service_name: "arm_driver" })]
-    const unknownEvent = {
-      id: "event-3",
-      payload: { message: "reserved event" },
-      time: "2026-05-30T12:00:02Z",
-      type: "future_event_type",
-    } satisfies ManagementEvent
-    const malformedChange = {
-      id: "event-4",
-      payload: { service: { service_name: "arm_driver" } },
-      time: "2026-05-30T12:00:03Z",
-      type: "service_status_changed",
-    } satisfies ManagementEvent
-
-    expect(reduceServiceStatusesForEvent(services, unknownEvent)).toBe(services)
-    expect(reduceServiceStatusesForEvent(services, malformedChange)).toBe(
-      services,
-    )
-  })
-})
-
 function makeServiceStatus(
   overrides: {
     display_name?: string
@@ -1301,6 +1177,14 @@ function masterControlPoseSnapshot() {
         yaw_deg: 180,
       },
     },
+  }
+}
+
+function dashboardSnapshot() {
+  return {
+    services: [makeServiceStatus()],
+    chassis_state: chassisStateSnapshot(),
+    master_control_pose: masterControlPoseSnapshot(),
   }
 }
 

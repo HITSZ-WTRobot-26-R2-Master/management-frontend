@@ -68,8 +68,7 @@ import { ManagementShell } from "@/components/management/ManagementShell"
 import { ChassisStateCard } from "@/components/management/ChassisStateCard"
 import { MasterControlPoseCard } from "@/components/management/MasterControlPoseCard"
 import { VisionHandinPage } from "@/features/vision-handin/VisionHandinPage"
-import { useChassisStateStream } from "@/hooks/useChassisStateStream"
-import { useMasterControlPoseStream } from "@/hooks/useMasterControlPoseStream"
+import { useDashboardStream } from "@/hooks/useDashboardStream"
 import {
   type CommandDiscoveryState,
   type CommandSubmissionState,
@@ -83,7 +82,6 @@ import {
   type ResetOriginPayload,
   writeResetOriginSessionPayload,
 } from "@/lib/reset-origin-payload"
-import { useEventStream } from "@/hooks/useEventStream"
 import {
   DEFAULT_SERVICE_LOG_TAIL,
   normalizeServiceLogTail,
@@ -229,8 +227,8 @@ const connectionLabels: Record<ConnectionStatus, string> = {
   idle: "未检查",
   checking: "检查中",
   connected: "已连接",
-  stream_connecting: "正在连接事件流",
-  live: "实时事件",
+  stream_connecting: "正在连接仪表盘",
+  live: "仪表盘实时",
   reconnecting: "正在重连",
   fallback: "REST 回退",
   auth_required: "需要令牌",
@@ -272,24 +270,21 @@ function ManagementApp() {
   const connectionState = useAtomValue(connectionStateAtom)
   const snapshot = useServicesSnapshot()
   const commandDiscovery = useCommandDiscovery()
-  const eventStream = useEventStream()
-  const chassisStateStream = useChassisStateStream()
-  const masterControlPoseStream = useMasterControlPoseStream()
+  const dashboardStream = useDashboardStream()
+  const chassisStateStream = dashboardStream.chassisStateStream
+  const masterControlPoseStream = dashboardStream.masterControlPoseStream
   const refreshSnapshot = snapshot.refresh
   const refreshCommands = commandDiscovery.refresh
-  const refreshRecent = eventStream.refreshRecent
-  const refreshChassisState = chassisStateStream.refresh
-  const refreshMasterControlPose = masterControlPoseStream.refresh
+  const refreshRecent = dashboardStream.refreshRecent
+  const refreshDashboard = dashboardStream.refreshDashboard
   const refreshManagementData = useCallback(() => {
     refreshSnapshot()
     refreshCommands()
     refreshRecent()
-    refreshChassisState()
-    refreshMasterControlPose()
+    refreshDashboard()
   }, [
-    refreshChassisState,
     refreshCommands,
-    refreshMasterControlPose,
+    refreshDashboard,
     refreshRecent,
     refreshSnapshot,
   ])
@@ -349,8 +344,8 @@ function ManagementApp() {
               path="/overview"
               element={
                 <OverviewTab
-                  eventStream={eventStream}
                   chassisStateStream={chassisStateStream}
+                  dashboardStream={dashboardStream}
                   lastLoadedAt={snapshot.lastLoadedAt}
                   masterControlPoseStream={masterControlPoseStream}
                   services={services}
@@ -393,7 +388,7 @@ function ManagementApp() {
             />
             <Route
               path="/events"
-              element={<RecentActivityPanel eventStream={eventStream} />}
+              element={<RecentActivityPanel dashboardStream={dashboardStream} />}
             />
             <Route
               path="/settings"
@@ -680,17 +675,17 @@ function ConnectionBadge({ state }: { state: ConnectionState }) {
 
 function OverviewTab({
   chassisStateStream,
-  eventStream,
+  dashboardStream,
   lastLoadedAt,
   masterControlPoseStream,
   services,
   onOpenEvents,
   onOpenServices,
 }: {
-  chassisStateStream: ReturnType<typeof useChassisStateStream>
-  eventStream: ReturnType<typeof useEventStream>
+  chassisStateStream: ReturnType<typeof useDashboardStream>["chassisStateStream"]
+  dashboardStream: ReturnType<typeof useDashboardStream>
   lastLoadedAt: string | null
-  masterControlPoseStream: ReturnType<typeof useMasterControlPoseStream>
+  masterControlPoseStream: ReturnType<typeof useDashboardStream>["masterControlPoseStream"]
   services: ServiceStatus[]
   onOpenEvents: () => void
   onOpenServices: () => void
@@ -703,7 +698,7 @@ function OverviewTab({
     <section className="flex h-full min-h-0 flex-col gap-3 overflow-hidden">
       <HeaderSummary
         abnormalServices={abnormalServices}
-        eventStream={eventStream}
+        dashboardStream={dashboardStream}
         lastLoadedAt={lastLoadedAt}
         services={services}
         onOpenServices={onOpenServices}
@@ -714,7 +709,7 @@ function OverviewTab({
       </div>
       <div className="grid min-h-0 flex-1">
         <OverviewEventsSummary
-          eventStream={eventStream}
+          dashboardStream={dashboardStream}
           onOpenEvents={onOpenEvents}
         />
       </div>
@@ -955,10 +950,10 @@ function AbnormalServicesPanelContent({
 }
 
 function OverviewEventsSummary({
-  eventStream,
+  dashboardStream,
   onOpenEvents,
 }: {
-  eventStream: ReturnType<typeof useEventStream>
+  dashboardStream: ReturnType<typeof useDashboardStream>
   onOpenEvents: () => void
 }) {
   const events = useAtomValue(recentEventsAtom)
@@ -972,10 +967,10 @@ function OverviewEventsSummary({
             最近事件摘要
           </h2>
           <p className="mt-1 truncate text-sm text-muted-foreground">
-            {eventStream.lastEventAt
-              ? `最新实时事件 ${formatTimestamp(eventStream.lastEventAt)}`
-              : eventStream.loadedRecentAt
-                ? `历史已加载 ${formatTimestamp(eventStream.loadedRecentAt)}`
+            {dashboardStream.loadedRecentAt
+              ? `历史已加载 ${formatTimestamp(dashboardStream.loadedRecentAt)}`
+              : dashboardStream.lastSnapshotAt
+                ? `仪表盘快照 ${formatTimestamp(dashboardStream.lastSnapshotAt)}`
                 : "等待事件历史"}
           </p>
         </div>
@@ -993,7 +988,7 @@ function OverviewEventsSummary({
         <CompactEmptyState
           icon={ListRestart}
           title="暂无最近事件"
-          text="事件历史或实时流到达后会显示在这里。"
+          text="后端事件历史加载后会显示在这里。"
         />
       ) : (
         <ol className="min-h-0 flex-1 divide-y divide-border overflow-y-auto">
@@ -1030,13 +1025,13 @@ function CompactEmptyState({
 
 function HeaderSummary({
   abnormalServices,
-  eventStream,
+  dashboardStream,
   lastLoadedAt,
   services,
   onOpenServices,
 }: {
   abnormalServices: ServiceStatus[]
-  eventStream: ReturnType<typeof useEventStream>
+  dashboardStream: ReturnType<typeof useDashboardStream>
   lastLoadedAt: string | null
   services: ServiceStatus[]
   onOpenServices: () => void
@@ -1093,21 +1088,21 @@ function HeaderSummary({
           detail="可见的类型化命令定义"
         />
         <MetricTile
-          icon={eventStream.error ? AlertTriangle : Activity}
-          label="事件流"
+          icon={dashboardStream.error ? AlertTriangle : Activity}
+          label="仪表盘流"
           value={connectionLabels[connectionState.status]}
           detail={
-            eventStream.lastEventAt
-              ? `实时 ${formatTimestamp(eventStream.lastEventAt)}`
-              : eventStream.fallbackRefreshAt
+            dashboardStream.lastSnapshotAt
+              ? `快照 ${formatTimestamp(dashboardStream.lastSnapshotAt)}`
+              : dashboardStream.fallbackRefreshAt
                 ? `REST 回退 ${formatTimestamp(
-                    eventStream.fallbackRefreshAt,
+                    dashboardStream.fallbackRefreshAt,
                   )}`
-                : eventStream.error
-                  ? formatApiError(eventStream.error)
-                  : eventStream.loadedRecentAt
+                : dashboardStream.error
+                  ? formatApiError(dashboardStream.error)
+                  : dashboardStream.loadedRecentAt
                       ? `最近事件已加载 ${formatTimestamp(
-                          eventStream.loadedRecentAt,
+                          dashboardStream.loadedRecentAt,
                         )}`
                       : lastLoadedAt
                         ? `快照 ${formatTimestamp(lastLoadedAt)}`
@@ -1119,8 +1114,8 @@ function HeaderSummary({
           label="最近事件"
           value={events.length.toString()}
           detail={
-            eventStream.loadedRecentAt
-              ? `已加载 ${formatTimestamp(eventStream.loadedRecentAt)}`
+            dashboardStream.loadedRecentAt
+              ? `已加载 ${formatTimestamp(dashboardStream.loadedRecentAt)}`
               : lastLoadedAt
                   ? `已加载 ${formatTimestamp(lastLoadedAt)}`
                   : "等待首次加载"
@@ -1557,9 +1552,9 @@ function ResetOriginQuickCommandButton({
 }
 
 function RecentActivityPanel({
-  eventStream,
+  dashboardStream,
 }: {
-  eventStream: ReturnType<typeof useEventStream>
+  dashboardStream: ReturnType<typeof useDashboardStream>
 }) {
   const events = useAtomValue(recentEventsAtom)
   const connectionState = useAtomValue(connectionStateAtom)
@@ -1574,8 +1569,7 @@ function RecentActivityPanel({
             最近活动
           </h2>
           <p className="mt-1 max-w-3xl truncate text-sm text-muted-foreground">
-            展示来自 <code>/api/events/recent</code> 和 <code>/ws/events</code>{" "}
-            的重启、类型化命令、后端警告和状态流事件。
+            展示来自 <code>/api/events/recent</code> 的重启、类型化命令和后端事件历史。
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -1592,10 +1586,10 @@ function RecentActivityPanel({
       <div className="grid shrink-0 gap-3 border-b border-border p-2.5 md:grid-cols-3">
         <ActivityMeta
           icon={Activity}
-          label="最近事件"
+          label="仪表盘快照"
           value={
-            eventStream.lastEventAt
-              ? formatTimestamp(eventStream.lastEventAt)
+            dashboardStream.lastSnapshotAt
+              ? formatTimestamp(dashboardStream.lastSnapshotAt)
               : "尚未收到"
           }
         />
@@ -1603,8 +1597,8 @@ function RecentActivityPanel({
           icon={RefreshCw}
           label="回退刷新"
           value={
-            eventStream.fallbackRefreshAt
-              ? formatTimestamp(eventStream.fallbackRefreshAt)
+            dashboardStream.fallbackRefreshAt
+              ? formatTimestamp(dashboardStream.fallbackRefreshAt)
               : "未使用"
           }
         />
@@ -1612,7 +1606,7 @@ function RecentActivityPanel({
           icon={ListRestart}
           label="最近历史"
           value={
-            eventStream.loadedRecentAt
+            dashboardStream.loadedRecentAt
               ? `已加载 ${events.length} 条事件`
               : "正在加载历史"
           }
@@ -1625,13 +1619,13 @@ function RecentActivityPanel({
           tone="warning"
           title="已安排 WebSocket 重连"
         >
-          下次尝试时间 {formatTimestamp(connectionState.next_retry_at)}。事件流不可用时会执行 REST 服务刷新。
+          下次尝试时间 {formatTimestamp(connectionState.next_retry_at)}。仪表盘流不可用时会执行 REST 刷新。
         </InlineNotice>
       ) : null}
 
-      {eventStream.error ? (
+      {dashboardStream.error ? (
         <div className="shrink-0 px-5 pt-4">
-          <PanelError error={eventStream.error} />
+          <PanelError error={dashboardStream.error} />
         </div>
       ) : null}
 
@@ -1646,7 +1640,7 @@ function RecentActivityPanel({
               暂无最近事件
             </h3>
             <p className="mt-2 text-sm text-muted-foreground">
-              最近活动会先从后端事件历史初始化，然后追加实时 WebSocket 事件。
+              最近活动会从后端事件历史初始化。
             </p>
           </div>
         </div>

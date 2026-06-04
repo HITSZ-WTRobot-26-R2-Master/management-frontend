@@ -1,17 +1,13 @@
 import { useAtomValue, useSetAtom } from "jotai"
-import { useCallback, useEffect, useRef, useState } from "react"
-import {
-  getSnapshotServices,
-  reduceServiceStatusesForEvent,
-} from "@/lib/event-reducer"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   AUTH_REQUIRED_ERROR,
-  buildManagementWebSocketUrl,
+  buildDashboardWebSocketUrl,
   getApiError,
   hasManagementAuthToken,
   isAbortError,
+  isDashboardWebSocketMessage,
   isManagementAuthError,
-  isManagementEvent,
 } from "@/lib/management-api"
 import {
   authTokenAtom,
@@ -24,25 +20,65 @@ import {
 } from "@/state/operator-shell"
 import type {
   ApiError,
+  ChassisStateSnapshot,
   ConnectionStatus,
+  DashboardSnapshotMessage,
   ManagementEvent,
-  ServiceStatus,
+  MasterControlPoseSnapshot,
 } from "@/types/management"
 
 const maxRecentEvents = 200
 const maxReconnectAttempts = 8
 const baseReconnectDelayMs = 1_000
 const maxReconnectDelayMs = 30_000
+const maxDashboardSnapshotAgeMs = 10_000
 
-interface EventStreamState {
+export type DashboardPanelStreamStatus =
+  | "auth_required"
+  | "connecting"
+  | "live"
+  | "fallback"
+  | "error"
+
+export interface ChassisStateStreamState {
   error: ApiError | null
-  fallbackRefreshAt: string | null
-  lastEventAt: string | null
-  loadedRecentAt: string | null
-  refreshRecent: () => void
+  lastMessageAt: string | null
+  refresh: () => void
+  snapshot: ChassisStateSnapshot | null
+  status: DashboardPanelStreamStatus
 }
 
-export function useEventStream(): EventStreamState {
+export interface MasterControlPoseStreamState {
+  error: ApiError | null
+  lastMessageAt: string | null
+  refresh: () => void
+  snapshot: MasterControlPoseSnapshot | null
+  status: DashboardPanelStreamStatus
+}
+
+interface DashboardStreamInternalState {
+  chassisState: ChassisStateSnapshot | null
+  error: ApiError | null
+  fallbackRefreshAt: string | null
+  lastSnapshotAt: string | null
+  loadedRecentAt: string | null
+  masterControlPose: MasterControlPoseSnapshot | null
+  status: DashboardPanelStreamStatus
+}
+
+export interface DashboardStreamState {
+  chassisStateStream: ChassisStateStreamState
+  error: ApiError | null
+  fallbackRefreshAt: string | null
+  lastSnapshotAt: string | null
+  loadedRecentAt: string | null
+  masterControlPoseStream: MasterControlPoseStreamState
+  refreshDashboard: () => void
+  refreshRecent: () => void
+  status: DashboardPanelStreamStatus
+}
+
+export function useDashboardStream(): DashboardStreamState {
   const baseUrl = useAtomValue(baseUrlAtom)
   const token = useAtomValue(authTokenAtom)
   const client = useAtomValue(managementApiClientAtom)
@@ -51,16 +87,23 @@ export function useEventStream(): EventStreamState {
   const setRecentEvents = useSetAtom(recentEventsAtom)
   const setServiceStatuses = useSetAtom(serviceStatusesAtom)
   const fallbackInFlightRef = useRef(false)
+  const latestSeqRef = useRef(-1)
   const [recentRefreshIndex, setRecentRefreshIndex] = useState(0)
-  const [state, setState] = useState<EventStreamState>({
+  const [dashboardRefreshIndex, setDashboardRefreshIndex] = useState(0)
+  const [state, setState] = useState<DashboardStreamInternalState>({
+    chassisState: null,
     error: null,
     fallbackRefreshAt: null,
-    lastEventAt: null,
+    lastSnapshotAt: null,
     loadedRecentAt: null,
-    refreshRecent: () => undefined,
+    masterControlPose: null,
+    status: "auth_required",
   })
   const refreshRecent = useCallback(() => {
     setRecentRefreshIndex((current) => current + 1)
+  }, [])
+  const refreshDashboard = useCallback(() => {
+    setDashboardRefreshIndex((current) => current + 1)
   }, [])
   const hasToken = hasManagementAuthToken(token)
 
@@ -71,19 +114,12 @@ export function useEventStream(): EventStreamState {
         ...current,
         error: AUTH_REQUIRED_ERROR,
         loadedRecentAt: null,
-        refreshRecent,
       }))
       return
     }
 
     const controller = new AbortController()
     let disposed = false
-
-    setState((current) => ({
-      ...current,
-      error: null,
-      loadedRecentAt: null,
-    }))
 
     async function loadRecentEvents() {
       try {
@@ -93,16 +129,9 @@ export function useEventStream(): EventStreamState {
           return
         }
 
-        const boundedEvents = boundEvents(events)
-        const latestSnapshot = findLatestSnapshot(boundedEvents)
-
-        setRecentEvents(boundedEvents)
-        if (latestSnapshot) {
-          setServiceStatuses(latestSnapshot)
-        }
+        setRecentEvents(boundEvents(events))
         setState((current) => ({
           ...current,
-          error: null,
           loadedRecentAt: new Date().toISOString(),
         }))
       } catch (error) {
@@ -110,12 +139,7 @@ export function useEventStream(): EventStreamState {
           return
         }
 
-        const apiError = getApiError(error)
-        setLatestError(apiError)
-        setState((current) => ({
-          ...current,
-          error: apiError,
-        }))
+        setLatestError(getApiError(error))
       }
     }
 
@@ -125,18 +149,12 @@ export function useEventStream(): EventStreamState {
       disposed = true
       controller.abort()
     }
-  }, [
-    client,
-    hasToken,
-    recentRefreshIndex,
-    refreshRecent,
-    setLatestError,
-    setRecentEvents,
-    setServiceStatuses,
-  ])
+  }, [client, hasToken, recentRefreshIndex, setLatestError, setRecentEvents])
 
   useEffect(() => {
     if (!hasToken) {
+      latestSeqRef.current = -1
+      setServiceStatuses([])
       setConnectionState({
         status: "auth_required",
         checked_at: new Date().toISOString(),
@@ -146,10 +164,12 @@ export function useEventStream(): EventStreamState {
       setLatestError(null)
       setState((current) => ({
         ...current,
+        chassisState: null,
         error: AUTH_REQUIRED_ERROR,
         fallbackRefreshAt: null,
-        lastEventAt: null,
-        refreshRecent,
+        lastSnapshotAt: null,
+        masterControlPose: null,
+        status: "auth_required",
       }))
       return
     }
@@ -159,6 +179,52 @@ export function useEventStream(): EventStreamState {
     let reconnectTimer: number | null = null
     let fallbackController: AbortController | null = null
     let retryAttempt = 0
+    latestSeqRef.current = -1
+
+    const applyDashboardSnapshot = (
+      message: DashboardSnapshotMessage,
+      options: { requireFresh: boolean; status: DashboardPanelStreamStatus },
+    ) => {
+      if (message.seq <= latestSeqRef.current) {
+        return true
+      }
+
+      if (options.requireFresh && isDashboardSnapshotTooOld(message.time)) {
+        const apiError: ApiError = {
+          code: "request_failed",
+          message: "仪表盘实时快照延迟过高，正在重连",
+        }
+        setLatestError(apiError)
+        setState((current) => ({
+          ...current,
+          error: apiError,
+          status: "error",
+        }))
+        return false
+      }
+
+      latestSeqRef.current = message.seq
+      const receivedAt = new Date().toISOString()
+      setServiceStatuses(message.snapshot.services)
+      setLatestError(null)
+      setConnectionState((current) => ({
+        ...current,
+        status: options.status === "fallback" ? "fallback" : "live",
+        checked_at: receivedAt,
+        last_event_at: receivedAt,
+        next_retry_at: null,
+        retry_attempt: 0,
+      }))
+      setState((current) => ({
+        ...current,
+        chassisState: message.snapshot.chassis_state,
+        error: null,
+        lastSnapshotAt: message.time,
+        masterControlPose: message.snapshot.master_control_pose,
+        status: options.status,
+      }))
+      return true
+    }
 
     const refreshFallback = async (): Promise<ApiError | null> => {
       if (fallbackInFlightRef.current) {
@@ -169,14 +235,32 @@ export function useEventStream(): EventStreamState {
       fallbackController = controller
       fallbackInFlightRef.current = true
       try {
-        const services = await client.listServices(controller.signal)
+        const message = await client.getDashboard(controller.signal)
 
         if (disposed) {
           return null
         }
 
         const fallbackAt = new Date().toISOString()
-        setServiceStatuses(services)
+        if (message.type === "dashboard_snapshot") {
+          applyDashboardSnapshot(message, {
+            requireFresh: false,
+            status: "fallback",
+          })
+        } else {
+          const apiError: ApiError = {
+            code: message.code,
+            message: message.message,
+          }
+          setLatestError(apiError)
+          setState((current) => ({
+            ...current,
+            error: apiError,
+            status: "error",
+          }))
+          return apiError
+        }
+
         setConnectionState((current) => ({
           ...current,
           fallback_at: fallbackAt,
@@ -204,6 +288,7 @@ export function useEventStream(): EventStreamState {
         setState((current) => ({
           ...current,
           error: apiError,
+          status: isManagementAuthError(apiError) ? "auth_required" : "error",
         }))
         return apiError
       } finally {
@@ -233,6 +318,10 @@ export function useEventStream(): EventStreamState {
           retry_attempt: retryAttempt,
           next_retry_at: null,
         }))
+        setState((current) => ({
+          ...current,
+          status: "fallback",
+        }))
         return
       }
 
@@ -246,6 +335,10 @@ export function useEventStream(): EventStreamState {
         checked_at: new Date().toISOString(),
         retry_attempt: retryAttempt,
         next_retry_at: nextRetryAt,
+      }))
+      setState((current) => ({
+        ...current,
+        status: "connecting",
       }))
 
       reconnectTimer = window.setTimeout(() => {
@@ -271,7 +364,7 @@ export function useEventStream(): EventStreamState {
       let socketOpened = false
       let url: string
       try {
-        url = buildManagementWebSocketUrl(baseUrl, token)
+        url = buildDashboardWebSocketUrl(baseUrl, token)
       } catch (error) {
         const apiError = getApiError(error)
         setLatestError(apiError)
@@ -282,6 +375,7 @@ export function useEventStream(): EventStreamState {
         setState((current) => ({
           ...current,
           error: apiError,
+          status: "error",
         }))
         void refreshFallback()
         return
@@ -293,18 +387,24 @@ export function useEventStream(): EventStreamState {
         checked_at: new Date().toISOString(),
         retry_attempt: retryAttempt,
       }))
+      setState((current) => ({
+        ...current,
+        error: null,
+        status: "connecting",
+      }))
 
       try {
         socket = new WebSocket(url)
       } catch {
         const apiError: ApiError = {
           code: "request_failed",
-          message: "无法打开管理事件流",
+          message: "无法打开仪表盘实时流",
         }
         setLatestError(apiError)
         setState((current) => ({
           ...current,
           error: apiError,
+          status: "error",
         }))
         scheduleReconnect()
         return
@@ -327,6 +427,7 @@ export function useEventStream(): EventStreamState {
         setState((current) => ({
           ...current,
           error: null,
+          status: "live",
         }))
       })
 
@@ -335,24 +436,34 @@ export function useEventStream(): EventStreamState {
           return
         }
 
-        const event = parseSocketEvent(message.data)
-        if (!event) {
+        const parsed = parseDashboardSocketMessage(message.data)
+        if (!parsed) {
           return
         }
 
-        const eventAt = new Date().toISOString()
-        setRecentEvents((current) => appendEvent(current, event))
-        applyEventToServices(event, setServiceStatuses)
-        setConnectionState((current) => ({
-          ...current,
-          status: "live",
-          checked_at: eventAt,
-          last_event_at: eventAt,
-        }))
-        setState((current) => ({
-          ...current,
-          lastEventAt: eventAt,
-        }))
+        if (parsed.type === "dashboard_snapshot") {
+          const accepted = applyDashboardSnapshot(parsed, {
+            requireFresh: true,
+            status: "live",
+          })
+          if (!accepted) {
+            socket?.close()
+          }
+          return
+        }
+
+        if (parsed.seq > latestSeqRef.current) {
+          const apiError: ApiError = {
+            code: parsed.code,
+            message: parsed.message,
+          }
+          setLatestError(apiError)
+          setState((current) => ({
+            ...current,
+            error: apiError,
+            status: "error",
+          }))
+        }
       })
 
       socket.addEventListener("close", () => {
@@ -383,63 +494,84 @@ export function useEventStream(): EventStreamState {
   }, [
     baseUrl,
     client,
+    dashboardRefreshIndex,
     hasToken,
-    refreshRecent,
     setConnectionState,
     setLatestError,
-    setRecentEvents,
     setServiceStatuses,
     token,
   ])
 
+  const chassisStateStream = useMemo<ChassisStateStreamState>(
+    () => ({
+      error: state.error,
+      lastMessageAt: state.lastSnapshotAt,
+      refresh: refreshDashboard,
+      snapshot: state.chassisState,
+      status: state.status,
+    }),
+    [
+      refreshDashboard,
+      state.chassisState,
+      state.error,
+      state.lastSnapshotAt,
+      state.status,
+    ],
+  )
+  const masterControlPoseStream = useMemo<MasterControlPoseStreamState>(
+    () => ({
+      error: state.error,
+      lastMessageAt: state.lastSnapshotAt,
+      refresh: refreshDashboard,
+      snapshot: state.masterControlPose,
+      status: state.status,
+    }),
+    [
+      refreshDashboard,
+      state.error,
+      state.lastSnapshotAt,
+      state.masterControlPose,
+      state.status,
+    ],
+  )
+
   return {
-    ...state,
+    chassisStateStream,
+    error: state.error,
+    fallbackRefreshAt: state.fallbackRefreshAt,
+    lastSnapshotAt: state.lastSnapshotAt,
+    loadedRecentAt: state.loadedRecentAt,
+    masterControlPoseStream,
+    refreshDashboard,
     refreshRecent,
+    status: state.status,
   }
 }
 
-function parseSocketEvent(data: unknown): ManagementEvent | null {
+function parseDashboardSocketMessage(data: unknown) {
   if (typeof data !== "string") {
     return null
   }
 
   try {
     const parsed = JSON.parse(data) as unknown
-    return isManagementEvent(parsed) ? parsed : null
+    return isDashboardWebSocketMessage(parsed) ? parsed : null
   } catch {
     return null
   }
 }
 
-function appendEvent(events: ManagementEvent[], event: ManagementEvent) {
-  if (events.some((current) => current.id === event.id)) {
-    return events
+function isDashboardSnapshotTooOld(time: string) {
+  const parsed = Date.parse(time)
+  if (!Number.isFinite(parsed)) {
+    return true
   }
 
-  return boundEvents([...events, event])
+  return Date.now() - parsed > maxDashboardSnapshotAgeMs
 }
 
 function boundEvents(events: ManagementEvent[]) {
   return events.slice(-maxRecentEvents)
-}
-
-function applyEventToServices(
-  event: ManagementEvent,
-  setServiceStatuses: (update: (current: ServiceStatus[]) => ServiceStatus[]) => void,
-) {
-  setServiceStatuses((current) => reduceServiceStatusesForEvent(current, event))
-}
-
-function findLatestSnapshot(events: ManagementEvent[]) {
-  for (let index = events.length - 1; index >= 0; index -= 1) {
-    const services = getSnapshotServices(events[index])
-
-    if (services) {
-      return services
-    }
-  }
-
-  return null
 }
 
 function getReconnectDelayMs(attempt: number) {

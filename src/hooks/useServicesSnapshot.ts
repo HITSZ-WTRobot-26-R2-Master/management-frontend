@@ -9,7 +9,6 @@ import {
 } from "@/lib/management-api"
 import {
   authTokenAtom,
-  baseUrlAtom,
   connectionStateAtom,
   latestErrorAtom,
   managementApiClientAtom,
@@ -18,6 +17,7 @@ import {
 } from "@/state/operator-shell"
 import type {
   ApiError,
+  ApiErrorCode,
   ConnectionStatus,
   ServiceDefinition,
 } from "@/types/management"
@@ -32,7 +32,6 @@ interface ServicesSnapshotState {
 }
 
 export function useServicesSnapshot(): ServicesSnapshotState {
-  const baseUrl = useAtomValue(baseUrlAtom)
   const client = useAtomValue(managementApiClientAtom)
   const token = useAtomValue(authTokenAtom)
   const setServiceStatuses = useSetAtom(serviceStatusesAtom)
@@ -95,8 +94,8 @@ export function useServicesSnapshot(): ServicesSnapshotState {
     })
 
     async function loadSnapshot() {
-      const [servicesResult, definitionsResult] = await Promise.allSettled([
-        client.listServices(controller.signal),
+      const [dashboardResult, definitionsResult] = await Promise.allSettled([
+        client.getDashboard(controller.signal),
         client.listServiceDefinitions(controller.signal),
       ])
 
@@ -104,12 +103,30 @@ export function useServicesSnapshot(): ServicesSnapshotState {
         return
       }
 
-      if (servicesResult.status === "rejected") {
-        if (isAbortError(servicesResult.reason)) {
+      if (dashboardResult.status === "rejected") {
+        if (isAbortError(dashboardResult.reason)) {
           return
         }
 
-        const apiError = getApiError(servicesResult.reason)
+        const apiError = getApiError(dashboardResult.reason)
+        setServiceStatuses([])
+        setServiceDefinitions([])
+        setLatestError(apiError)
+        setConnectionState(toConnectionState(getConnectionStatus(apiError)))
+        setState((current) => ({
+          ...current,
+          loading: false,
+          refreshing: false,
+          error: apiError,
+        }))
+        return
+      }
+
+      if (dashboardResult.value.type === "dashboard_error") {
+        const apiError = {
+          code: dashboardResult.value.code as ApiErrorCode,
+          message: dashboardResult.value.message,
+        }
         setServiceStatuses([])
         setServiceDefinitions([])
         setLatestError(apiError)
@@ -131,7 +148,7 @@ export function useServicesSnapshot(): ServicesSnapshotState {
           : null
       const loadedAt = new Date().toISOString()
 
-      setServiceStatuses(servicesResult.value)
+      setServiceStatuses(dashboardResult.value.snapshot.services)
       setServiceDefinitions(nextDefinitions)
       setLatestError(null)
       setConnectionState((current) => {
@@ -163,7 +180,6 @@ export function useServicesSnapshot(): ServicesSnapshotState {
     }
   }, [
     client,
-    baseUrl,
     hasToken,
     refreshIndex,
     setConnectionState,

@@ -1,18 +1,18 @@
 import type {
   ApiError,
   ChassisStateSnapshot,
-  ChassisStateWebSocketMessage,
   CommandDefinition,
   CommandRequest,
   CommandResponse,
   ConnectionState,
+  DashboardSnapshot,
+  DashboardWebSocketMessage,
   DockerState,
   DockerStatus,
   HealthResponse,
   ManagementEvent,
   MasterControlPoseMessage,
   MasterControlPoseSnapshot,
-  MasterControlPoseWebSocketMessage,
   OdinOdometryPoseMessage,
   OverallLevel,
   OverallStatus,
@@ -201,6 +201,12 @@ export class ManagementApiClient {
     )
   }
 
+  getDashboard(signal?: AbortSignal) {
+    return this.request("/api/dashboard", isDashboardWebSocketMessage, {
+      signal,
+    })
+  }
+
   restartService(
     serviceName: string,
     request: RestartRequest,
@@ -384,29 +390,10 @@ export function buildManagementHttpUrl(baseUrl: string, path: string) {
   return new URL(endpointPath, base).toString()
 }
 
-export function buildManagementWebSocketUrl(baseUrl: string, token: string) {
+export function buildDashboardWebSocketUrl(baseUrl: string, token: string) {
   return buildManagementWebSocketEndpointUrl(
     baseUrl,
-    "/ws/events",
-    token,
-  ).toString()
-}
-
-export function buildChassisStateWebSocketUrl(baseUrl: string, token: string) {
-  return buildManagementWebSocketEndpointUrl(
-    baseUrl,
-    "/ws/chassis/state",
-    token,
-  ).toString()
-}
-
-export function buildMasterControlPoseWebSocketUrl(
-  baseUrl: string,
-  token: string,
-) {
-  return buildManagementWebSocketEndpointUrl(
-    baseUrl,
-    "/ws/master-control/pose",
+    "/ws/dashboard",
     token,
   ).toString()
 }
@@ -780,6 +767,19 @@ export function isMasterControlPoseSnapshot(
   )
 }
 
+export function isDashboardSnapshot(
+  value: unknown,
+): value is DashboardSnapshot {
+  return (
+    isRecord(value) &&
+    isServiceStatusArray(value.services) &&
+    (value.chassis_state === null ||
+      isChassisStateSnapshot(value.chassis_state)) &&
+    (value.master_control_pose === null ||
+      isMasterControlPoseSnapshot(value.master_control_pose))
+  )
+}
+
 function isPoseSourceSnapshot<TMessage>(
   value: unknown,
   isMessage: (message: unknown) => message is TMessage,
@@ -891,37 +891,25 @@ function isRosTime(value: unknown) {
   return isRecord(value) && isNumber(value.sec) && isNumber(value.nanosec)
 }
 
-export function isChassisStateWebSocketMessage(
+export function isDashboardWebSocketMessage(
   value: unknown,
-): value is ChassisStateWebSocketMessage {
-  if (!isRecord(value) || !isString(value.type) || !isString(value.time)) {
+): value is DashboardWebSocketMessage {
+  if (
+    !isRecord(value) ||
+    !isString(value.type) ||
+    !isInteger(value.seq) ||
+    value.seq < 0 ||
+    !isString(value.time)
+  ) {
     return false
   }
 
-  if (value.type === "chassis_state_snapshot") {
-    return isChassisStateSnapshot(value.snapshot)
+  if (value.type === "dashboard_snapshot") {
+    return isDashboardSnapshot(value.snapshot)
   }
 
   return (
-    value.type === "chassis_state_error" &&
-    isString(value.code) &&
-    isString(value.message)
-  )
-}
-
-export function isMasterControlPoseWebSocketMessage(
-  value: unknown,
-): value is MasterControlPoseWebSocketMessage {
-  if (!isRecord(value) || !isString(value.type) || !isString(value.time)) {
-    return false
-  }
-
-  if (value.type === "master_control_pose_snapshot") {
-    return isMasterControlPoseSnapshot(value.snapshot)
-  }
-
-  return (
-    value.type === "master_control_pose_error" &&
+    value.type === "dashboard_error" &&
     isString(value.code) &&
     isString(value.message)
   )
@@ -1050,6 +1038,10 @@ function isString(value: unknown): value is string {
 
 function isNumber(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value)
+}
+
+function isInteger(value: unknown): value is number {
+  return Number.isInteger(value)
 }
 
 function isBoolean(value: unknown): value is boolean {

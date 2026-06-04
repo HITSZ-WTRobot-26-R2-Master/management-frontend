@@ -8,7 +8,7 @@ import {
 } from "lucide-react"
 import { useMemo } from "react"
 import type { LucideIcon } from "lucide-react"
-import type { MasterControlPoseStreamState } from "@/hooks/useMasterControlPoseStream"
+import type { MasterControlPoseStreamState } from "@/hooks/useDashboardStream"
 import { formatMillimeterPrecision, formatRosTime } from "@/lib/display-format"
 import { cn } from "@/lib/utils"
 import type {
