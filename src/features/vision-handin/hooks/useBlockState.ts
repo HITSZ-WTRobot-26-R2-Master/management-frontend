@@ -9,12 +9,9 @@ import {
   authTokenAtom,
   baseUrlAtom,
 } from "@/state/operator-shell";
-import type {
-  ApiError,
-  BlockStateValue,
-} from "@/types/management";
+import type { ApiError } from "@/types/management";
 import type { BlockState, SystemMode } from "../lib/types";
-import { STATE_VALUES, VALUE_TO_STATE } from "../lib/constants";
+import { blockStateToValue, parseBlockStateMessage } from "../lib/blockStateStream";
 
 const INITIAL_BLOCKS: BlockState[] = Array(12).fill("null");
 const RECONNECT_DELAY_MS = 3000;
@@ -44,13 +41,10 @@ export function useBlockState() {
   const token = useAtomValue(authTokenAtom);
   const hasToken = hasManagementAuthToken(token);
   const [blocks, setBlocks] = useState<BlockState[]>(INITIAL_BLOCKS);
-  const blocksRef = useRef(blocks);
   const reconnectTimerRef = useRef<number | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const [status, setStatus] = useState<BlockSyncStatus>("auth_required");
   const [error, setError] = useState<ApiError | null>(AUTH_REQUIRED_ERROR);
-
-  blocksRef.current = blocks;
 
   const [mode, setModeState] = useState<SystemMode>(() => ({
     color: getParam("color", "blue") as SystemMode["color"],
@@ -101,16 +95,25 @@ export function useBlockState() {
         reconnectAttempt = 0;
         setStatus("live");
         setError(null);
-        sendBlocks(blocksRef.current);
       };
 
       wsRef.current.onmessage = (event) => {
-        const nextBlocks = parseBlockStateMessage(event.data);
-        if (!nextBlocks || disposed) {
+        const message = parseBlockStateMessage(event.data);
+        if (!message || disposed) {
           return;
         }
 
-        setBlocks(nextBlocks);
+        if (message.type === "block_states_snapshot") {
+          setBlocks(message.blocks);
+          setStatus("live");
+          setError(null);
+          return;
+        }
+
+        setError({
+          code: message.code,
+          message: message.message,
+        });
       };
 
       wsRef.current.onclose = () => {
@@ -127,14 +130,6 @@ export function useBlockState() {
       wsRef.current.onerror = () => {
         wsRef.current?.close();
       };
-    }
-
-    function sendBlocks(nextBlocks: BlockState[]) {
-      if (wsRef.current?.readyState !== WebSocket.OPEN) {
-        return;
-      }
-
-      wsRef.current.send(JSON.stringify(nextBlocks.map(blockStateToValue)));
     }
 
     connect();
@@ -185,37 +180,4 @@ export function useBlockState() {
     error,
     baseUrl,
   };
-}
-
-function blockStateToValue(state: BlockState): BlockStateValue {
-  return STATE_VALUES[state] as BlockStateValue;
-}
-
-function blockStateValueToState(value: BlockStateValue): BlockState {
-  return VALUE_TO_STATE[value];
-}
-
-function parseBlockStateMessage(data: unknown): BlockState[] | null {
-  if (typeof data !== "string") {
-    return null;
-  }
-
-  try {
-    const parsed = JSON.parse(data) as unknown;
-    if (!isBlockStateValueArray(parsed)) {
-      return null;
-    }
-
-    return parsed.map(blockStateValueToState);
-  } catch {
-    return null;
-  }
-}
-
-function isBlockStateValueArray(value: unknown): value is BlockStateValue[] {
-  return (
-    Array.isArray(value) &&
-    value.length === 12 &&
-    value.every((item) => Number.isInteger(item) && item >= 0 && item <= 4)
-  );
 }

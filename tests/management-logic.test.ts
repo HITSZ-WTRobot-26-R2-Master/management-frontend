@@ -43,6 +43,7 @@ import {
   parseServiceLogWebSocketMessage,
   trimServiceLogLines,
 } from "../src/lib/service-log-stream"
+import { parseBlockStateMessage } from "../src/features/vision-handin/lib/blockStateStream"
 import {
   isServiceNotFoundError,
   removeStaleServiceStatus,
@@ -301,6 +302,83 @@ describe("management API URL helpers", () => {
     expect(isValidManagementBaseUrl("/management-api")).toBe(true)
     expect(isValidManagementBaseUrl("ftp://192.168.31.52:8080")).toBe(false)
     expect(isValidManagementBaseUrl("//192.168.31.52:8080")).toBe(false)
+  })
+})
+
+describe("vision hand-in block state stream", () => {
+  test("parses block state snapshot envelopes from the backend", () => {
+    expect(
+      parseBlockStateMessage(
+        JSON.stringify({
+          type: "block_states_snapshot",
+          time: "2026-06-04T12:00:00Z",
+          snapshot: {
+            states: [0, 1, 2, 3, 4, 0, 1, 2, 3, 4, 0, 1],
+            revision: 7,
+          },
+        }),
+      ),
+    ).toEqual({
+      type: "block_states_snapshot",
+      blocks: [
+        "unknown",
+        "null",
+        "r1",
+        "r2",
+        "fake",
+        "unknown",
+        "null",
+        "r1",
+        "r2",
+        "fake",
+        "unknown",
+        "null",
+      ],
+      revision: 7,
+    })
+  })
+
+  test("parses block state error envelopes from the backend", () => {
+    expect(
+      parseBlockStateMessage(
+        JSON.stringify({
+          type: "block_states_error",
+          time: "2026-06-04T12:00:00Z",
+          code: "invalid_block_states",
+          message: "block states must contain 12 values, got 3",
+        }),
+      ),
+    ).toEqual({
+      type: "block_states_error",
+      code: "invalid_block_states",
+      message: "block states must contain 12 values, got 3",
+    })
+  })
+
+  test("rejects stale bare-array and malformed block state messages", () => {
+    expect(parseBlockStateMessage("[0,1,2,3,4,0,1,2,3,4,0,1]")).toBeNull()
+    expect(
+      parseBlockStateMessage(
+        JSON.stringify({
+          type: "block_states_snapshot",
+          snapshot: {
+            states: [0, 1, 2],
+            revision: 1,
+          },
+        }),
+      ),
+    ).toBeNull()
+    expect(
+      parseBlockStateMessage(
+        JSON.stringify({
+          type: "block_states_snapshot",
+          snapshot: {
+            states: [5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5],
+            revision: 1,
+          },
+        }),
+      ),
+    ).toBeNull()
   })
 })
 
