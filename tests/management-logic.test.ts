@@ -45,6 +45,10 @@ import {
 } from "../src/lib/service-log-stream"
 import { parseBlockStateMessage } from "../src/features/vision-handin/lib/blockStateStream"
 import {
+  BLOCK_STATE_RECONNECT_DELAY_MS,
+  getBlockStateReconnectDelayMs,
+} from "../src/features/vision-handin/lib/blockStateConnection"
+import {
   isServiceNotFoundError,
   removeStaleServiceStatus,
 } from "../src/lib/service-not-found-recovery"
@@ -306,6 +310,27 @@ describe("management API URL helpers", () => {
 })
 
 describe("vision hand-in block state stream", () => {
+  test("retries the first failed websocket handshake immediately once", () => {
+    expect(
+      getBlockStateReconnectDelayMs({
+        hasOpened: false,
+        usedInitialFastRetry: false,
+      }),
+    ).toBe(0)
+    expect(
+      getBlockStateReconnectDelayMs({
+        hasOpened: false,
+        usedInitialFastRetry: true,
+      }),
+    ).toBe(BLOCK_STATE_RECONNECT_DELAY_MS)
+    expect(
+      getBlockStateReconnectDelayMs({
+        hasOpened: true,
+        usedInitialFastRetry: false,
+      }),
+    ).toBe(BLOCK_STATE_RECONNECT_DELAY_MS)
+  })
+
   test("parses block state snapshot envelopes from the backend", () => {
     expect(
       parseBlockStateMessage(

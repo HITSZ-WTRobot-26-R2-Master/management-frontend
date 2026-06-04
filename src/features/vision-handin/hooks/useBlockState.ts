@@ -12,9 +12,9 @@ import {
 import type { ApiError } from "@/types/management";
 import type { BlockState, SystemMode } from "../lib/types";
 import { blockStateToValue, parseBlockStateMessage } from "../lib/blockStateStream";
+import { getBlockStateReconnectDelayMs } from "../lib/blockStateConnection";
 
 const INITIAL_BLOCKS: BlockState[] = Array(12).fill("null");
-const RECONNECT_DELAY_MS = 3000;
 
 export type BlockSyncStatus =
   | "auth_required"
@@ -72,8 +72,15 @@ export function useBlockState() {
 
     let disposed = false;
     let reconnectAttempt = 0;
+    let hasOpened = false;
+    let usedInitialFastRetry = false;
 
     function connect() {
+      if (reconnectTimerRef.current !== null) {
+        window.clearTimeout(reconnectTimerRef.current);
+        reconnectTimerRef.current = null;
+      }
+
       try {
         wsRef.current = new WebSocket(buildBlockStatesWebSocketUrl(baseUrl, token));
         setStatus(reconnectAttempt > 0 ? "reconnecting" : "connecting");
@@ -93,6 +100,7 @@ export function useBlockState() {
         }
 
         reconnectAttempt = 0;
+        hasOpened = true;
         setStatus("live");
         setError(null);
       };
@@ -124,7 +132,14 @@ export function useBlockState() {
 
         reconnectAttempt += 1;
         setStatus("reconnecting");
-        reconnectTimerRef.current = window.setTimeout(connect, RECONNECT_DELAY_MS);
+        const reconnectDelayMs = getBlockStateReconnectDelayMs({
+          hasOpened,
+          usedInitialFastRetry,
+        });
+        if (reconnectDelayMs === 0) {
+          usedInitialFastRetry = true;
+        }
+        reconnectTimerRef.current = window.setTimeout(connect, reconnectDelayMs);
       };
 
       wsRef.current.onerror = () => {
