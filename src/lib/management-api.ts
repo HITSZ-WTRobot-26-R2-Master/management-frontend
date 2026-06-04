@@ -411,6 +411,14 @@ export function buildMasterControlPoseWebSocketUrl(
   ).toString()
 }
 
+export function buildBlockStatesWebSocketUrl(baseUrl: string, token: string) {
+  return buildManagementWebSocketEndpointUrl(
+    baseUrl,
+    "/ws",
+    token,
+  ).toString()
+}
+
 export function buildServiceLogWebSocketUrl(
   baseUrl: string,
   token: string,

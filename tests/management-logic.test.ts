@@ -23,6 +23,7 @@ import {
   buildManagementWebSocketUrl,
   buildChassisStateWebSocketUrl,
   buildMasterControlPoseWebSocketUrl,
+  buildBlockStatesWebSocketUrl,
   buildServiceLogWebSocketUrl,
   isChassisStateSnapshot,
   isChassisStateWebSocketMessage,
@@ -329,6 +330,12 @@ describe("management API URL helpers", () => {
         value: previousLocation,
       })
     }
+  })
+
+  test("builds block states WebSocket URLs with query token auth", () => {
+    expect(
+      buildBlockStatesWebSocketUrl("http://127.0.0.1:8080", "change-me"),
+    ).toBe("ws://127.0.0.1:8080/ws?token=change-me")
   })
 
   test("preserves the existing events WebSocket helper behavior", () => {

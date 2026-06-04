@@ -318,6 +318,8 @@ export interface MasterControlPoseSnapshot {
   odin_odometry: PoseSourceSnapshot<OdinOdometryPoseMessage>
 }
 
+export type BlockStateValue = 0 | 1 | 2 | 3 | 4
+
 export interface ChassisStateSnapshotMessage {
   type: "chassis_state_snapshot"
   time: string

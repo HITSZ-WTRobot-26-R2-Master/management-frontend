@@ -1,6 +1,7 @@
 import {
   Bell,
   Boxes,
+  Crosshair,
   Gauge,
   RefreshCw,
   ServerCog,
@@ -64,6 +65,13 @@ export function ManagementShell({
             </div>
             <div className="flex flex-wrap items-center gap-2 lg:justify-end">
               {connectionStatus}
+              <NavLink
+                to="/vision"
+                className="inline-flex h-8 items-center gap-2 rounded-md border border-border bg-card px-2.5 text-sm font-semibold text-card-foreground hover:bg-muted"
+              >
+                <Crosshair aria-hidden="true" className="size-4" />
+                R2 Vision
+              </NavLink>
               <button
                 type="button"
                 className="inline-flex h-8 items-center gap-2 rounded-md border border-border bg-card px-2.5 text-sm font-semibold text-card-foreground hover:bg-muted disabled:cursor-not-allowed disabled:opacity-70"

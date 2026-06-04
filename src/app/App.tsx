@@ -67,6 +67,7 @@ import {
 import { ManagementShell } from "@/components/management/ManagementShell"
 import { ChassisStateCard } from "@/components/management/ChassisStateCard"
 import { MasterControlPoseCard } from "@/components/management/MasterControlPoseCard"
+import { VisionHandinPage } from "@/features/vision-handin/VisionHandinPage"
 import { useChassisStateStream } from "@/hooks/useChassisStateStream"
 import { useMasterControlPoseStream } from "@/hooks/useMasterControlPoseStream"
 import {
@@ -255,7 +256,10 @@ function decodeRouteParam(value: string) {
 export function App() {
   return (
     <BrowserRouter>
-      <ManagementApp />
+      <Routes>
+        <Route path="/vision" element={<VisionHandinPage />} />
+        <Route path="/*" element={<ManagementApp />} />
+      </Routes>
     </BrowserRouter>
   )
 }
