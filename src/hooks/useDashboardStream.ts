@@ -6,9 +6,10 @@ import {
   getApiError,
   hasManagementAuthToken,
   isAbortError,
-  isDashboardWebSocketMessage,
   isManagementAuthError,
+  parseDashboardStreamMessage,
 } from "@/lib/management-api"
+import { applyServiceSummaryUpdates } from "@/lib/dashboard-service-summary"
 import {
   authTokenAtom,
   baseUrlAtom,
@@ -22,6 +23,7 @@ import type {
   ApiError,
   ChassisStateSnapshot,
   ConnectionStatus,
+  DashboardCompactWebSocketMessage,
   DashboardSnapshotMessage,
   ManagementEvent,
   MasterControlPoseSnapshot,
@@ -87,7 +89,13 @@ export function useDashboardStream(): DashboardStreamState {
   const setRecentEvents = useSetAtom(recentEventsAtom)
   const setServiceStatuses = useSetAtom(serviceStatusesAtom)
   const fallbackInFlightRef = useRef(false)
-  const latestSeqRef = useRef(-1)
+  const latestSeqRef = useRef({
+    chassis: -1,
+    error: -1,
+    pose: -1,
+    services: -1,
+    snapshot: -1,
+  })
   const [recentRefreshIndex, setRecentRefreshIndex] = useState(0)
   const [dashboardRefreshIndex, setDashboardRefreshIndex] = useState(0)
   const [state, setState] = useState<DashboardStreamInternalState>({
@@ -153,7 +161,7 @@ export function useDashboardStream(): DashboardStreamState {
 
   useEffect(() => {
     if (!hasToken) {
-      latestSeqRef.current = -1
+      latestSeqRef.current = initialDashboardSeqState()
       setServiceStatuses([])
       setConnectionState({
         status: "auth_required",
@@ -179,13 +187,13 @@ export function useDashboardStream(): DashboardStreamState {
     let reconnectTimer: number | null = null
     let fallbackController: AbortController | null = null
     let retryAttempt = 0
-    latestSeqRef.current = -1
+    latestSeqRef.current = initialDashboardSeqState()
 
     const applyDashboardSnapshot = (
       message: DashboardSnapshotMessage,
       options: { requireFresh: boolean; status: DashboardPanelStreamStatus },
     ) => {
-      if (message.seq <= latestSeqRef.current) {
+      if (message.seq <= latestSeqRef.current.snapshot) {
         return true
       }
 
@@ -203,7 +211,13 @@ export function useDashboardStream(): DashboardStreamState {
         return false
       }
 
-      latestSeqRef.current = message.seq
+      latestSeqRef.current = {
+        chassis: message.seq,
+        error: latestSeqRef.current.error,
+        pose: message.seq,
+        services: message.seq,
+        snapshot: message.seq,
+      }
       const receivedAt = new Date().toISOString()
       setServiceStatuses(message.snapshot.services)
       setLatestError(null)
@@ -221,6 +235,111 @@ export function useDashboardStream(): DashboardStreamState {
         error: null,
         lastSnapshotAt: message.time,
         masterControlPose: message.snapshot.master_control_pose,
+        status: options.status,
+      }))
+      return true
+    }
+
+    const applyDashboardCompactMessage = (
+      message: DashboardCompactWebSocketMessage,
+      options: { requireFresh: boolean; status: DashboardPanelStreamStatus },
+    ) => {
+      if (message.type === "dashboard_error") {
+        if (message.seq <= latestSeqRef.current.error) {
+          return true
+        }
+        latestSeqRef.current = {
+          ...latestSeqRef.current,
+          error: message.seq,
+        }
+        const apiError: ApiError = {
+          code: message.code,
+          message: message.message,
+        }
+        setLatestError(apiError)
+        setState((current) => ({
+          ...current,
+          error: apiError,
+          status: "error",
+        }))
+        return true
+      }
+
+      if (options.requireFresh && isDashboardSnapshotTooOld(message.time)) {
+        const apiError: ApiError = {
+          code: "request_failed",
+          message: "仪表盘实时快照延迟过高，正在重连",
+        }
+        setLatestError(apiError)
+        setState((current) => ({
+          ...current,
+          error: apiError,
+          status: "error",
+        }))
+        return false
+      }
+
+      const receivedAt = new Date().toISOString()
+      setLatestError(null)
+      setConnectionState((current) => ({
+        ...current,
+        status: options.status === "fallback" ? "fallback" : "live",
+        checked_at: receivedAt,
+        last_event_at: receivedAt,
+        next_retry_at: null,
+        retry_attempt: 0,
+      }))
+
+      if (message.type === "dashboard_services") {
+        if (message.seq <= latestSeqRef.current.services) {
+          return true
+        }
+        latestSeqRef.current = {
+          ...latestSeqRef.current,
+          services: message.seq,
+        }
+        setServiceStatuses((current) =>
+          applyServiceSummaryUpdates(current, message.services),
+        )
+        setState((current) => ({
+          ...current,
+          error: null,
+          lastSnapshotAt: message.time,
+          status: options.status,
+        }))
+        return true
+      }
+
+      if (message.type === "dashboard_chassis") {
+        if (message.seq <= latestSeqRef.current.chassis) {
+          return true
+        }
+        latestSeqRef.current = {
+          ...latestSeqRef.current,
+          chassis: message.seq,
+        }
+        setState((current) => ({
+          ...current,
+          chassisState: message.chassis_state,
+          error: null,
+          lastSnapshotAt: message.time,
+          status: options.status,
+        }))
+        return true
+      }
+
+      if (message.seq <= latestSeqRef.current.pose) {
+        return true
+      }
+      latestSeqRef.current = {
+        ...latestSeqRef.current,
+        pose: message.seq,
+      }
+      setState((current) => ({
+        ...current,
+        error: null,
+        lastSnapshotAt: message.time,
+        masterControlPose: message.master_control_pose,
         status: options.status,
       }))
       return true
@@ -452,17 +571,12 @@ export function useDashboardStream(): DashboardStreamState {
           return
         }
 
-        if (parsed.seq > latestSeqRef.current) {
-          const apiError: ApiError = {
-            code: parsed.code,
-            message: parsed.message,
-          }
-          setLatestError(apiError)
-          setState((current) => ({
-            ...current,
-            error: apiError,
-            status: "error",
-          }))
+        const accepted = applyDashboardCompactMessage(parsed, {
+          requireFresh: true,
+          status: "live",
+        })
+        if (!accepted) {
+          socket?.close()
         }
       })
 
@@ -555,9 +669,19 @@ function parseDashboardSocketMessage(data: unknown) {
 
   try {
     const parsed = JSON.parse(data) as unknown
-    return isDashboardWebSocketMessage(parsed) ? parsed : null
+    return parseDashboardStreamMessage(parsed)
   } catch {
     return null
+  }
+}
+
+function initialDashboardSeqState() {
+  return {
+    chassis: -1,
+    error: -1,
+    pose: -1,
+    services: -1,
+    snapshot: -1,
   }
 }
 

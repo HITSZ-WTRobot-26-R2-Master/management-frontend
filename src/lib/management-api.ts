@@ -5,7 +5,9 @@ import type {
   CommandRequest,
   CommandResponse,
   ConnectionState,
+  DashboardCompactWebSocketMessage,
   DashboardSnapshot,
+  DashboardStreamMessage,
   DashboardWebSocketMessage,
   DockerState,
   DockerStatus,
@@ -25,6 +27,7 @@ import type {
   RosStatus,
   RosTopicFreshness,
   RosTopicStatus,
+  ServiceSummaryUpdate,
   ServiceDefinition,
   ServiceLogsResponse,
   ServiceRiskLevel,
@@ -915,6 +918,508 @@ export function isDashboardWebSocketMessage(
   )
 }
 
+export function parseDashboardStreamMessage(
+  value: unknown,
+): DashboardStreamMessage | null {
+  if (isDashboardWebSocketMessage(value)) {
+    return value
+  }
+
+  if (!Array.isArray(value) || value.length < 4 || !isString(value[0])) {
+    return null
+  }
+
+  const [, seq, timeMs] = value
+  if (!isNonNegativeInteger(seq)) {
+    return null
+  }
+  const time = isoFromEpochMs(timeMs)
+  if (!time) {
+    return null
+  }
+
+  switch (value[0]) {
+    case "c":
+      return parseDashboardChassisFrame(value, seq, time)
+    case "p":
+      return parseDashboardPoseFrame(value, seq, time)
+    case "s":
+      return parseDashboardServicesFrame(value, seq, time)
+    case "e":
+      return parseDashboardErrorFrame(value, seq, time)
+    default:
+      return null
+  }
+}
+
+function parseDashboardChassisFrame(
+  value: unknown[],
+  seq: number,
+  time: string,
+): DashboardCompactWebSocketMessage | null {
+  if (value.length !== 4) {
+    return null
+  }
+  const chassisState = parseCompactChassisState(value[3])
+  if (!chassisState) {
+    return null
+  }
+
+  return {
+    type: "dashboard_chassis",
+    seq,
+    time,
+    chassis_state: chassisState,
+  }
+}
+
+function parseDashboardPoseFrame(
+  value: unknown[],
+  seq: number,
+  time: string,
+): DashboardCompactWebSocketMessage | null {
+  if (value.length !== 4) {
+    return null
+  }
+  const masterControlPose = parseCompactMasterControlPose(value[3])
+  if (!masterControlPose) {
+    return null
+  }
+
+  return {
+    type: "dashboard_pose",
+    seq,
+    time,
+    master_control_pose: masterControlPose,
+  }
+}
+
+function parseDashboardServicesFrame(
+  value: unknown[],
+  seq: number,
+  time: string,
+): DashboardCompactWebSocketMessage | null {
+  if (value.length !== 4 || !Array.isArray(value[3])) {
+    return null
+  }
+  const services: ServiceSummaryUpdate[] = []
+  for (const item of value[3]) {
+    const summary = parseCompactServiceSummary(item)
+    if (!summary) {
+      return null
+    }
+    services.push(summary)
+  }
+
+  return {
+    type: "dashboard_services",
+    seq,
+    time,
+    services,
+  }
+}
+
+function parseDashboardErrorFrame(
+  value: unknown[],
+  seq: number,
+  time: string,
+): DashboardCompactWebSocketMessage | null {
+  if (
+    value.length !== 5 ||
+    !isString(value[3]) ||
+    value[3].length === 0 ||
+    !isString(value[4])
+  ) {
+    return null
+  }
+
+  return {
+    type: "dashboard_error",
+    seq,
+    time,
+    code: value[3],
+    message: value[4],
+  }
+}
+
+function parseCompactServiceSummary(
+  value: unknown,
+): ServiceSummaryUpdate | null {
+  if (!Array.isArray(value) || value.length !== 13) {
+    return null
+  }
+  const [
+    serviceIndex,
+    overallLevelCode,
+    overallReason,
+    dockerExistsCode,
+    dockerStateCode,
+    dockerRunningCode,
+    dockerStatus,
+    dockerExitCode,
+    dockerRestartCount,
+    dockerHealth,
+    rosAgentAvailableCode,
+    rosLevelCode,
+    rosSummary,
+  ] = value
+  const overallLevel = decodeOverallLevel(overallLevelCode)
+  const dockerState = decodeDockerState(dockerStateCode)
+  const rosLevel = decodeOverallLevel(rosLevelCode)
+  const dockerExists = decodeBooleanCode(dockerExistsCode)
+  const dockerRunning = decodeBooleanCode(dockerRunningCode)
+  const rosAgentAvailable = decodeBooleanCode(rosAgentAvailableCode)
+
+  if (
+    !isNonNegativeInteger(serviceIndex) ||
+    !overallLevel ||
+    !isString(overallReason) ||
+    dockerExists === null ||
+    !dockerState ||
+    dockerRunning === null ||
+    !isNullableString(dockerStatus) ||
+    !isNullableNumber(dockerExitCode) ||
+    !isNullableNumber(dockerRestartCount) ||
+    !isNullableString(dockerHealth) ||
+    rosAgentAvailable === null ||
+    !rosLevel ||
+    !isString(rosSummary)
+  ) {
+    return null
+  }
+
+  return {
+    service_index: serviceIndex,
+    overall: {
+      level: overallLevel,
+      reason: overallReason,
+    },
+    docker: {
+      exists: dockerExists,
+      state: dockerState,
+      running: dockerRunning,
+      status: dockerStatus,
+      exit_code: dockerExitCode,
+      restart_count: dockerRestartCount,
+      health: dockerHealth,
+    },
+    ros: {
+      agent_available: rosAgentAvailable,
+      level: rosLevel,
+      summary: rosSummary,
+    },
+  }
+}
+
+function parseCompactChassisState(value: unknown): ChassisStateSnapshot | null {
+  if (!Array.isArray(value) || value.length !== 4) {
+    return null
+  }
+  const [availableCode, topic, receivedMs, messageValue] = value
+  const available = decodeBooleanCode(availableCode)
+  const receivedAt = nullableIsoFromEpochMs(receivedMs)
+  if (available === null || !isString(topic) || receivedAt === undefined) {
+    return null
+  }
+  const message =
+    messageValue === null ? null : parseCompactChassisMessage(messageValue)
+  if (message === undefined) {
+    return null
+  }
+
+  return {
+    available,
+    topic,
+    received_at: receivedAt,
+    message,
+  }
+}
+
+function parseCompactChassisMessage(
+  value: unknown,
+): ChassisStateSnapshot["message"] | undefined {
+  if (!Array.isArray(value) || value.length !== 15) {
+    return undefined
+  }
+  const [
+    timestampMs,
+    x,
+    y,
+    yawDeg,
+    frontHeight,
+    rearHeight,
+    actionRaw,
+    stepStatus,
+    chassisMode,
+    curveFinishedCode,
+    liftStatus,
+    gripStatus,
+    gripHasObjectCode,
+    infraredState,
+    connectionRaw,
+  ] = value
+  const curveFinished = decodeBooleanCode(curveFinishedCode)
+  const gripHasObject = decodeBooleanCode(gripHasObjectCode)
+  if (
+    !isNumber(timestampMs) ||
+    !isNumber(x) ||
+    !isNumber(y) ||
+    !isNumber(yawDeg) ||
+    !isNumber(frontHeight) ||
+    !isNumber(rearHeight) ||
+    !isNumber(actionRaw) ||
+    !isNumber(stepStatus) ||
+    !isNumber(chassisMode) ||
+    curveFinished === null ||
+    !isNumber(liftStatus) ||
+    !isNumber(gripStatus) ||
+    gripHasObject === null ||
+    !isNumber(infraredState) ||
+    !isNumber(connectionRaw)
+  ) {
+    return undefined
+  }
+
+  return {
+    timestamp_ms: timestampMs,
+    pose: {
+      x,
+      y,
+      yaw_deg: yawDeg,
+      front_height: frontHeight,
+      rear_height: rearHeight,
+    },
+    action: {
+      raw_table: actionRaw,
+      step_status: stepStatus,
+      chassis_mode: chassisMode,
+      chassis_curve_finished: curveFinished,
+      lift_status: liftStatus,
+      grip_status: gripStatus,
+      grip_suction_has_object: gripHasObject,
+      infrared_receiver_state: infraredState,
+    },
+    connection: decodeChassisConnection(connectionRaw),
+  }
+}
+
+function parseCompactMasterControlPose(
+  value: unknown,
+): MasterControlPoseSnapshot | null {
+  if (!Array.isArray(value) || value.length !== 5) {
+    return null
+  }
+  const [availableCode, topic, receivedMs, lidarValue, odinValue] = value
+  const available = decodeBooleanCode(availableCode)
+  const receivedAt = nullableIsoFromEpochMs(receivedMs)
+  const lidarPose = parseCompactPoseSource(
+    lidarValue,
+    parseCompactMasterControlPoseMessage,
+  )
+  const odinOdometry = parseCompactPoseSource(
+    odinValue,
+    parseCompactOdinOdometryPoseMessage,
+  )
+  if (
+    available === null ||
+    !isString(topic) ||
+    receivedAt === undefined ||
+    !lidarPose ||
+    !odinOdometry
+  ) {
+    return null
+  }
+
+  return {
+    available,
+    topic,
+    received_at: receivedAt,
+    lidar_pose: lidarPose,
+    odin_odometry: odinOdometry,
+  }
+}
+
+function parseCompactPoseSource<TMessage>(
+  value: unknown,
+  parseMessage: (value: unknown) => TMessage | undefined,
+): PoseSourceSnapshot<TMessage> | null {
+  if (!Array.isArray(value) || value.length !== 4) {
+    return null
+  }
+  const [availableCode, topic, receivedMs, messageValue] = value
+  const available = decodeBooleanCode(availableCode)
+  const receivedAt = nullableIsoFromEpochMs(receivedMs)
+  if (available === null || !isString(topic) || receivedAt === undefined) {
+    return null
+  }
+  const message = messageValue === null ? null : parseMessage(messageValue)
+  if (message === undefined) {
+    return null
+  }
+
+  return {
+    available,
+    topic,
+    received_at: receivedAt,
+    message,
+  }
+}
+
+function parseCompactMasterControlPoseMessage(
+  value: unknown,
+): MasterControlPoseMessage | undefined {
+  if (!Array.isArray(value) || value.length !== 9) {
+    return undefined
+  }
+  const [stampSec, stampNanosec, frameId, x, y, z, rollDeg, pitchDeg, yawDeg] =
+    value
+  if (
+    !isNumber(stampSec) ||
+    !isNumber(stampNanosec) ||
+    !isString(frameId) ||
+    !isNumber(x) ||
+    !isNumber(y) ||
+    !isNumber(z) ||
+    !isNumber(rollDeg) ||
+    !isNumber(pitchDeg) ||
+    !isNumber(yawDeg)
+  ) {
+    return undefined
+  }
+
+  return {
+    header: {
+      stamp: {
+        sec: stampSec,
+        nanosec: stampNanosec,
+      },
+      frame_id: frameId,
+    },
+    x,
+    y,
+    z,
+    roll_deg: rollDeg,
+    pitch_deg: pitchDeg,
+    yaw_deg: yawDeg,
+  }
+}
+
+function parseCompactOdinOdometryPoseMessage(
+  value: unknown,
+): OdinOdometryPoseMessage | undefined {
+  if (!Array.isArray(value) || value.length !== 10) {
+    return undefined
+  }
+  const [
+    stampSec,
+    stampNanosec,
+    frameId,
+    childFrameId,
+    x,
+    y,
+    z,
+    rollDeg,
+    pitchDeg,
+    yawDeg,
+  ] = value
+  if (
+    !isNumber(stampSec) ||
+    !isNumber(stampNanosec) ||
+    !isString(frameId) ||
+    !isString(childFrameId) ||
+    !isNumber(x) ||
+    !isNumber(y) ||
+    !isNumber(z) ||
+    !isNumber(rollDeg) ||
+    !isNumber(pitchDeg) ||
+    !isNumber(yawDeg)
+  ) {
+    return undefined
+  }
+
+  return {
+    header: {
+      stamp: {
+        sec: stampSec,
+        nanosec: stampNanosec,
+      },
+      frame_id: frameId,
+    },
+    child_frame_id: childFrameId,
+    x,
+    y,
+    z,
+    roll_deg: rollDeg,
+    pitch_deg: pitchDeg,
+    yaw_deg: yawDeg,
+  }
+}
+
+function decodeChassisConnection(rawTable: number) {
+  return {
+    raw_table: rawTable,
+    wheel_0: hasBit(rawTable, 0),
+    wheel_1: hasBit(rawTable, 1),
+    wheel_2: hasBit(rawTable, 2),
+    wheel_3: hasBit(rawTable, 3),
+    lift_0: hasBit(rawTable, 4),
+    lift_1: hasBit(rawTable, 5),
+    lift_2: hasBit(rawTable, 6),
+    lift_3: hasBit(rawTable, 7),
+    grip_arm: hasBit(rawTable, 8),
+    grip_turn: hasBit(rawTable, 9),
+    gyro_yaw: hasBit(rawTable, 10),
+    upper_host_localization: hasBit(rawTable, 14),
+    upper_host: hasBit(rawTable, 15),
+  }
+}
+
+function hasBit(value: number, bit: number) {
+  return (Math.trunc(value) & (1 << bit)) !== 0
+}
+
+function decodeOverallLevel(value: unknown): OverallLevel | null {
+  if (!isNumber(value)) {
+    return null
+  }
+  return overallLevels[value] ?? null
+}
+
+function decodeDockerState(value: unknown): DockerState | null {
+  if (!isNumber(value)) {
+    return null
+  }
+  return dockerStates[value] ?? null
+}
+
+function decodeBooleanCode(value: unknown): boolean | null {
+  if (value === 0) {
+    return false
+  }
+  if (value === 1) {
+    return true
+  }
+  return null
+}
+
+function nullableIsoFromEpochMs(value: unknown): string | null | undefined {
+  if (value === null) {
+    return null
+  }
+  return isoFromEpochMs(value) ?? undefined
+}
+
+function isoFromEpochMs(value: unknown): string | null {
+  if (!isNumber(value)) {
+    return null
+  }
+  const date = new Date(value)
+  if (!Number.isFinite(date.getTime())) {
+    return null
+  }
+  return date.toISOString()
+}
+
 function isRestartResponse(value: unknown): value is RestartResponse {
   return (
     isRecord(value) &&
@@ -1042,6 +1547,10 @@ function isNumber(value: unknown): value is number {
 
 function isInteger(value: unknown): value is number {
   return Number.isInteger(value)
+}
+
+function isNonNegativeInteger(value: unknown): value is number {
+  return isInteger(value) && value >= 0
 }
 
 function isBoolean(value: unknown): value is boolean {

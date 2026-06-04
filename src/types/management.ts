@@ -345,6 +345,53 @@ export type DashboardWebSocketMessage =
   | DashboardSnapshotMessage
   | DashboardErrorMessage
 
+export interface ServiceSummaryUpdate {
+  service_index: number
+  overall: OverallStatus
+  docker: Pick<
+    DockerStatus,
+    | "exists"
+    | "state"
+    | "running"
+    | "status"
+    | "exit_code"
+    | "restart_count"
+    | "health"
+  >
+  ros: Pick<RosStatus, "agent_available" | "level" | "summary">
+}
+
+export interface DashboardChassisFrameMessage {
+  type: "dashboard_chassis"
+  seq: number
+  time: string
+  chassis_state: ChassisStateSnapshot | null
+}
+
+export interface DashboardPoseFrameMessage {
+  type: "dashboard_pose"
+  seq: number
+  time: string
+  master_control_pose: MasterControlPoseSnapshot | null
+}
+
+export interface DashboardServicesFrameMessage {
+  type: "dashboard_services"
+  seq: number
+  time: string
+  services: ServiceSummaryUpdate[]
+}
+
+export type DashboardCompactWebSocketMessage =
+  | DashboardChassisFrameMessage
+  | DashboardPoseFrameMessage
+  | DashboardServicesFrameMessage
+  | DashboardErrorMessage
+
+export type DashboardStreamMessage =
+  | DashboardWebSocketMessage
+  | DashboardCompactWebSocketMessage
+
 export interface RestartRequest {
   mode: "hard"
   reason?: string

@@ -10,6 +10,7 @@ import {
   getChassisActionStateDisplayFields,
 } from "../src/lib/chassis-action-state-display"
 import { getCommandConfirmationState } from "../src/lib/command-confirmation"
+import { applyServiceSummaryUpdates } from "../src/lib/dashboard-service-summary"
 import {
   DEFAULT_RESET_ORIGIN_PAYLOAD,
   readResetOriginSessionPayload,
@@ -32,6 +33,7 @@ import {
   ManagementApiError,
   ManagementApiClient,
   parseApiError,
+  parseDashboardStreamMessage,
 } from "../src/lib/management-api"
 import {
   appendBoundedServiceLogLine,
@@ -438,6 +440,255 @@ describe("master-control pose API contract", () => {
         snapshot: { services: [{}], chassis_state: null, master_control_pose: null },
       }),
     ).toBe(false)
+  })
+
+  test("parses compact dashboard stream frames", () => {
+    const timestampMs = Date.parse("2026-06-04T12:00:00Z")
+
+    expect(
+      parseDashboardStreamMessage([
+        "s",
+        7,
+        timestampMs,
+        [[0, 1, "ros_warning", 1, 0, 1, "UP", null, 3, "healthy", 1, 1, "topic_stale"]],
+      ]),
+    ).toEqual({
+      type: "dashboard_services",
+      seq: 7,
+      time: "2026-06-04T12:00:00.000Z",
+      services: [
+        {
+          service_index: 0,
+          overall: {
+            level: "warning",
+            reason: "ros_warning",
+          },
+          docker: {
+            exists: true,
+            state: "running",
+            running: true,
+            status: "UP",
+            exit_code: null,
+            restart_count: 3,
+            health: "healthy",
+          },
+          ros: {
+            agent_available: true,
+            level: "warning",
+            summary: "topic_stale",
+          },
+        },
+      ],
+    })
+
+    expect(
+      parseDashboardStreamMessage([
+        "c",
+        8,
+        timestampMs,
+        [
+          1,
+          "chassis_state",
+          timestampMs,
+          [1234, 1.25, -2.5, 90, 0.12, 0.13, 0x1234, 1, 2, 1, 3, 4, 0, 2, 0xc3ff],
+        ],
+      ]),
+    ).toMatchObject({
+      type: "dashboard_chassis",
+      chassis_state: {
+        available: true,
+        topic: "chassis_state",
+        received_at: "2026-06-04T12:00:00.000Z",
+        message: {
+          timestamp_ms: 1234,
+          action: {
+            raw_table: 0x1234,
+            chassis_curve_finished: true,
+            grip_suction_has_object: false,
+          },
+          connection: {
+            raw_table: 0xc3ff,
+            wheel_0: true,
+            lift_3: true,
+            gyro_yaw: false,
+            upper_host_localization: true,
+            upper_host: true,
+          },
+        },
+      },
+    })
+
+    expect(
+      parseDashboardStreamMessage([
+        "p",
+        9,
+        timestampMs,
+        [
+          1,
+          "to_master_control",
+          timestampMs,
+          [
+            1,
+            "to_master_control",
+            timestampMs,
+            [123, 456000000, "ideal_world", 1.25, -2.5, 0.75, 0, 0, 90],
+          ],
+          [
+            1,
+            "/odin1/odometry",
+            timestampMs,
+            [124, 789000000, "odom", "odin1_base_link", 3.5, -4.25, 0.5, 0, 0, 180],
+          ],
+        ],
+      ]),
+    ).toMatchObject({
+      type: "dashboard_pose",
+      seq: 9,
+      master_control_pose: {
+        lidar_pose: {
+          topic: "to_master_control",
+          message: {
+            header: {
+              frame_id: "ideal_world",
+              stamp: {
+                sec: 123,
+                nanosec: 456000000,
+              },
+            },
+            yaw_deg: 90,
+          },
+        },
+        odin_odometry: {
+          topic: "/odin1/odometry",
+          message: {
+            child_frame_id: "odin1_base_link",
+            header: {
+              frame_id: "odom",
+            },
+            yaw_deg: 180,
+          },
+        },
+      },
+    })
+
+    expect(
+      parseDashboardStreamMessage([
+        "e",
+        10,
+        timestampMs,
+        "request_failed",
+        "agent unavailable",
+      ]),
+    ).toEqual({
+      type: "dashboard_error",
+      seq: 10,
+      time: "2026-06-04T12:00:00.000Z",
+      code: "request_failed",
+      message: "agent unavailable",
+    })
+  })
+
+  test("rejects malformed compact dashboard stream frames", () => {
+    const timestampMs = Date.parse("2026-06-04T12:00:00Z")
+
+    expect(parseDashboardStreamMessage(["x", 1, timestampMs, []])).toBeNull()
+    expect(parseDashboardStreamMessage(["c", 1, timestampMs, [2, "", null, null]])).toBeNull()
+    expect(
+      parseDashboardStreamMessage([
+        "s",
+        1,
+        timestampMs,
+        [[0, 9, "bad level", 1, 0, 1, null, null, null, null, 1, 0, "ok"]],
+      ]),
+    ).toBeNull()
+    expect(parseDashboardStreamMessage(["p", 1, "not-ms", []])).toBeNull()
+  })
+
+  test("applies compact service summaries without clearing diagnostics", () => {
+    const current = [
+      makeServiceStatus({
+        docker: {
+          health: "starting",
+          restart_count: 1,
+          running: true,
+          state: "running",
+          status: "UP",
+        },
+        overall: {
+          level: "warning",
+          reason: "topic_stale",
+        },
+        ros: {
+          diagnostics: [
+            {
+              level: "warning",
+              message: "camera delayed",
+              name: "camera",
+              source: "ros",
+              values: {
+                delay_ms: "120",
+              },
+            },
+          ],
+          expected_nodes: [
+            {
+              actual: null,
+              expected: "/chassis_serial",
+              matched: true,
+            },
+          ],
+          level: "warning",
+          summary: "topic_stale",
+          topics: [
+            {
+              actual: "chassis_state",
+              expected: "chassis_state",
+              freshness: "fresh",
+              last_message_at: "2026-06-04T12:00:00Z",
+              matched: true,
+              message_count: 10,
+              node_name: "/chassis_serial",
+              type: "interfaces/msg/ChassisState",
+            },
+          ],
+        },
+      }),
+    ]
+
+    const updated = applyServiceSummaryUpdates(current, [
+      {
+        service_index: 0,
+        docker: {
+          exists: true,
+          health: "healthy",
+          restart_count: 2,
+          running: true,
+          state: "running",
+          status: "UP 10 seconds",
+          exit_code: null,
+        },
+        overall: {
+          level: "ok",
+          reason: "ok",
+        },
+        ros: {
+          agent_available: true,
+          level: "ok",
+          summary: "ok",
+        },
+      },
+    ])
+
+    expect(updated).not.toBe(current)
+    expect(updated[0].overall).toEqual({
+      level: "ok",
+      reason: "ok",
+    })
+    expect(updated[0].docker.status).toBe("UP 10 seconds")
+    expect(updated[0].ros.summary).toBe("ok")
+    expect(updated[0].ros.diagnostics).toBe(current[0].ros.diagnostics)
+    expect(updated[0].ros.expected_nodes).toBe(current[0].ros.expected_nodes)
+    expect(updated[0].ros.topics).toBe(current[0].ros.topics)
   })
 
   test("validates dashboard snapshots with nullable dashboard sections", () => {
