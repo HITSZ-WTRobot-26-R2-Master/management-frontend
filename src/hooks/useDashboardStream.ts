@@ -25,6 +25,7 @@ import type {
   ConnectionStatus,
   DashboardCompactWebSocketMessage,
   DashboardSnapshotMessage,
+  LaserStatusSnapshot,
   ManagementEvent,
   MasterControlPoseSnapshot,
 } from "@/types/management"
@@ -58,11 +59,20 @@ export interface MasterControlPoseStreamState {
   status: DashboardPanelStreamStatus
 }
 
+export interface LaserStatusStreamState {
+  error: ApiError | null
+  lastMessageAt: string | null
+  refresh: () => void
+  snapshot: LaserStatusSnapshot | null
+  status: DashboardPanelStreamStatus
+}
+
 interface DashboardStreamInternalState {
   chassisState: ChassisStateSnapshot | null
   error: ApiError | null
   fallbackRefreshAt: string | null
   lastSnapshotAt: string | null
+  laserStatus: LaserStatusSnapshot | null
   loadedRecentAt: string | null
   masterControlPose: MasterControlPoseSnapshot | null
   status: DashboardPanelStreamStatus
@@ -72,6 +82,7 @@ export interface DashboardStreamState {
   chassisStateStream: ChassisStateStreamState
   error: ApiError | null
   fallbackRefreshAt: string | null
+  laserStatusStream: LaserStatusStreamState
   lastSnapshotAt: string | null
   loadedRecentAt: string | null
   masterControlPoseStream: MasterControlPoseStreamState

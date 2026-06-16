@@ -318,10 +318,172 @@ export interface MasterControlPoseSnapshot {
   odin_odometry: PoseSourceSnapshot<OdinOdometryPoseMessage>
 }
 
+export interface LaserStatusSnapshot {
+  available: boolean
+  topic: string
+  received_at: string | null
+  message: LaserStatusMessage | null
+}
+
+export interface LaserStatusMessage {
+  localized: boolean
+  state: string
+  pose_source: string
+  laser_pose_output: "POSE" | "NAN"
+  laser_pose_output_reason: string
+  laser_pose_output_reason_text: string
+  in_solve_region: boolean
+  solve_attempted: boolean
+  solve_success: boolean
+  current_solver_beams: string[]
+  coarse_pose: LaserPoseState
+  timing_debug: LaserTimingDebug
+  region_debug: LaserRegionDebug
+  solver_debug: LaserSolverDebug
+  laser_decoded?: LaserDecodedSnapshot
+  valid_beam_count: number
+  usable_sensor_count: number
+  selected_beam_count: number
+  selected_valid_beam_count: number
+  target_hit_count: number
+  score: number
+  prior_age_ms: number | null
+  reason: string
+  region_name: string | null
+  wall_pair_name: string | null
+  beam_mode: string | null
+  selected_beams: string[] | null
+  yaw_in_corner_deg: number | null
+  residual_m: number | null
+  corner_pose?: LaserCornerPose
+  corner_world_pose?: LaserCornerPose
+  world_pose?: LaserWorldPose
+}
+
+export interface LaserPoseState {
+  x: number
+  y: number
+  z: number
+  yaw_deg: number
+  roll_rad: number
+  pitch_rad: number
+}
+
+export interface LaserTimingDebug {
+  transport_delay_ms: number | null
+  range_frame_found: boolean | null
+  range_frame_age_ms: number | null
+  range_frame_count: number | null
+}
+
+export interface LaserRegionDebug {
+  evaluated: boolean
+  matched: boolean
+  matched_region_name: string | null
+  matched_wall_pair_name: string | null
+  candidate_count: number
+  candidates: LaserRegionCandidate[]
+}
+
+export interface LaserRegionCandidate {
+  name: string
+  priority: number
+  position_match: boolean
+  yaw_match: boolean
+  matched: boolean
+  position_score_m: number | null
+  yaw_error_deg: number | null
+  expected_yaw_deg: number | null
+  yaw_tolerance_deg: number | null
+  reject_reason: string | null
+}
+
+export interface LaserSolverDebug {
+  attempted: boolean
+  success: boolean
+  beam_mode?: string
+  x_beam?: string
+  side_front_beam?: string
+  side_rear_beam?: string
+  theta_side_deg?: number | null
+  corner_pose?: LaserCornerPose
+  corner_world_pose?: LaserCornerPose
+  candidate_pose?: LaserCornerPose
+  correction_debug?: LaserCorrectionDebug
+  residual_debug?: LaserResidualDebug
+  current_solver_beams: string[]
+}
+
+export interface LaserCorrectionDebug {
+  delta_x_m: number | null
+  delta_y_m: number | null
+  delta_xy_norm_m: number | null
+  delta_yaw_deg: number | null
+  max_correction_xy_m: number | null
+  max_correction_yaw_deg: number | null
+}
+
+export interface LaserResidualDebug {
+  mean_residual_m: number | null
+  target_hit_count: number | null
+  residual_thresh_m?: number | null
+  min_valid_corner_beams?: number | null
+}
+
+export interface LaserCornerPose {
+  x: number
+  y: number
+  yaw_deg: number
+}
+
+export interface LaserWorldPose {
+  frame_id: string
+  source?: string
+  x: number
+  y: number
+  yaw_deg: number
+}
+
+export interface LaserDecodedSnapshot {
+  has_data: boolean
+  query_device_ids: number[]
+  latest_range_frame_age_ms: number | null
+  device_frames: Record<string, LaserDeviceFrame>
+  logical_sensors: Record<string, LaserSensorState>
+}
+
+export interface LaserDeviceFrame {
+  device_id: number
+  age_ms: number
+  report_type: number
+  report_name: string
+  status_bits: number
+  slots: LaserSlotState[]
+}
+
+export interface LaserSlotState {
+  slot_index: number
+  raw_mm: number
+  online: boolean
+  serial_valid: boolean
+  range_m: number | null
+}
+
+export interface LaserSensorState {
+  device_id: number
+  slot_index: number
+  raw_mm: number | null
+  online: boolean | null
+  serial_valid: boolean
+  range_m: number | null
+  usable: boolean
+}
+
 export interface DashboardSnapshot {
   services: ServiceStatus[]
   chassis_state: ChassisStateSnapshot | null
   master_control_pose: MasterControlPoseSnapshot | null
+  laser_status: LaserStatusSnapshot | null
 }
 
 export type BlockStateValue = 0 | 1 | 2 | 3 | 4
@@ -382,10 +544,18 @@ export interface DashboardServicesFrameMessage {
   services: ServiceSummaryUpdate[]
 }
 
+export interface DashboardLaserFrameMessage {
+  type: "dashboard_laser"
+  seq: number
+  time: string
+  laser_status: LaserStatusSnapshot | null
+}
+
 export type DashboardCompactWebSocketMessage =
   | DashboardChassisFrameMessage
   | DashboardPoseFrameMessage
   | DashboardServicesFrameMessage
+  | DashboardLaserFrameMessage
   | DashboardErrorMessage
 
 export type DashboardStreamMessage =

@@ -12,6 +12,7 @@ import type {
   DockerState,
   DockerStatus,
   HealthResponse,
+  LaserStatusSnapshot,
   ManagementEvent,
   MasterControlPoseMessage,
   MasterControlPoseSnapshot,
@@ -945,6 +946,8 @@ export function parseDashboardStreamMessage(
       return parseDashboardPoseFrame(value, seq, time)
     case "s":
       return parseDashboardServicesFrame(value, seq, time)
+    case "l":
+      return parseDashboardLaserFrame(value, seq, time)
     case "e":
       return parseDashboardErrorFrame(value, seq, time)
     default:
@@ -1039,6 +1042,44 @@ function parseDashboardErrorFrame(
     time,
     code: value[3],
     message: value[4],
+  }
+}
+
+function parseDashboardLaserFrame(
+  value: unknown[],
+  seq: number,
+  time: string,
+): DashboardCompactWebSocketMessage | null {
+  if (value.length !== 4) {
+    return null
+  }
+  const laserStatus = parseCompactLaserStatus(value[3])
+  if (!laserStatus) {
+    return null
+  }
+
+  return {
+    type: "dashboard_laser",
+    seq,
+    time,
+    laser_status: laserStatus,
+  }
+}
+
+function parseCompactLaserStatus(value: unknown): LaserStatusSnapshot | null {
+  if (!Array.isArray(value) || value.length !== 4) {
+    return null
+  }
+  const [available, topic, receivedMs, message] = value
+  if (typeof available !== "number" || typeof topic !== "string") {
+    return null
+  }
+
+  return {
+    available: available === 1,
+    topic,
+    received_at: isoFromEpochMs(receivedMs),
+    message: message as LaserStatusSnapshot["message"] | null ?? null,
   }
 }
 
