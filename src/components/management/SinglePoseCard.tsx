@@ -4,7 +4,6 @@ import {
   CircleHelp,
 } from "lucide-react"
 import { useMemo } from "react"
-import type { LucideIcon } from "lucide-react"
 import { formatMillimeterPrecision, formatRosTime } from "@/lib/display-format"
 import { cn } from "@/lib/utils"
 import type {
@@ -39,7 +38,6 @@ export function SinglePoseCard({
   stream,
   title,
   subtitle: defaultSubtitle,
-  icon: Icon,
   showChildFrame,
   onDetailToggle,
   detailExpanded,
@@ -48,7 +46,6 @@ export function SinglePoseCard({
   stream: SinglePoseStreamState
   title: string
   subtitle: string
-  icon: LucideIcon
   showChildFrame?: boolean
   onDetailToggle?: () => void
   detailExpanded?: boolean
@@ -166,12 +163,6 @@ function PoseAngleValue({ axis, value }: { axis: "R" | "P" | "Y"; value: number 
 
 function formatAngle(value: number, digits = 2) {
   return Number.isFinite(value) ? value.toFixed(digits) : "缺失"
-}
-
-function formatAge(value: number | null) {
-  if (value === null) return "未知延迟"
-  if (value < 1_000) return `${Math.max(0, Math.round(value))} ms 前`
-  return `${Math.round(value / 1_000)} s 前`
 }
 
 function ageFromIso(value: string | null) {

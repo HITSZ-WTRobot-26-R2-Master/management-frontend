@@ -28,7 +28,6 @@ import type {
   LaserStatusSnapshot,
   ManagementEvent,
   MasterControlPoseMessage,
-  MasterControlPoseSnapshot,
   OdinOdometryPoseMessage,
   PoseSourceSnapshot,
 } from "@/types/management"

@@ -5,7 +5,6 @@ import {
   RefreshCw,
   ChevronDown,
   ChevronRight,
-  Crosshair,
 } from "lucide-react"
 import { useMemo, useState } from "react"
 import type { LucideIcon } from "lucide-react"

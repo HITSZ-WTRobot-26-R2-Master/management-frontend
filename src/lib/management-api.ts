@@ -1011,7 +1011,7 @@ function parseDashboardOdinFrame(
   if (value.length !== 4) {
     return null
   }
-  const odinOdometry = parseCompactSinglePose(value[3])
+  const odinOdometry = parseCompactOdinPose(value[3])
   if (!odinOdometry) {
     return null
   }
@@ -1340,10 +1340,9 @@ function parseCompactSinglePose(
   }
 }
 
-function parseCompactPoseSource<TMessage>(
+function parseCompactOdinPose(
   value: unknown,
-  parseMessage: (value: unknown) => TMessage | undefined,
-): PoseSourceSnapshot<TMessage> | null {
+): PoseSourceSnapshot<OdinOdometryPoseMessage> | null {
   if (!Array.isArray(value) || value.length !== 4) {
     return null
   }
@@ -1353,11 +1352,13 @@ function parseCompactPoseSource<TMessage>(
   if (available === null || !isString(topic) || receivedAt === undefined) {
     return null
   }
-  const message = messageValue === null ? null : parseMessage(messageValue)
+  const message =
+    messageValue === null
+      ? null
+      : parseCompactOdinOdometryPoseMessage(messageValue)
   if (message === undefined) {
     return null
   }
-
   return {
     available,
     topic,
