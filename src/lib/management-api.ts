@@ -944,6 +944,12 @@ export function parseDashboardStreamMessage(
       return parseDashboardChassisFrame(value, seq, time)
     case "p":
       return parseDashboardPoseFrame(value, seq, time)
+    case "o":
+      return parseDashboardOdinFrame(value, seq, time)
+    case "d":
+      return parseDashboardOdinBaseFrame(value, seq, time)
+    case "g":
+      return parseDashboardLaserPoseFrame(value, seq, time)
     case "s":
       return parseDashboardServicesFrame(value, seq, time)
     case "l":
@@ -984,7 +990,7 @@ function parseDashboardPoseFrame(
   if (value.length !== 4) {
     return null
   }
-  const masterControlPose = parseCompactMasterControlPose(value[3])
+  const masterControlPose = parseCompactSinglePose(value[3])
   if (!masterControlPose) {
     return null
   }
@@ -994,6 +1000,69 @@ function parseDashboardPoseFrame(
     seq,
     time,
     master_control_pose: masterControlPose,
+  }
+}
+
+function parseDashboardOdinFrame(
+  value: unknown[],
+  seq: number,
+  time: string,
+): DashboardCompactWebSocketMessage | null {
+  if (value.length !== 4) {
+    return null
+  }
+  const odinOdometry = parseCompactSinglePose(value[3])
+  if (!odinOdometry) {
+    return null
+  }
+
+  return {
+    type: "dashboard_odin",
+    seq,
+    time,
+    odin_odometry: odinOdometry,
+  }
+}
+
+function parseDashboardOdinBaseFrame(
+  value: unknown[],
+  seq: number,
+  time: string,
+): DashboardCompactWebSocketMessage | null {
+  if (value.length !== 4) {
+    return null
+  }
+  const odinBasePose = parseCompactSinglePose(value[3])
+  if (!odinBasePose) {
+    return null
+  }
+
+  return {
+    type: "dashboard_odin_base",
+    seq,
+    time,
+    odin_base_pose: odinBasePose,
+  }
+}
+
+function parseDashboardLaserPoseFrame(
+  value: unknown[],
+  seq: number,
+  time: string,
+): DashboardCompactWebSocketMessage | null {
+  if (value.length !== 4) {
+    return null
+  }
+  const laserPose = parseCompactSinglePose(value[3])
+  if (!laserPose) {
+    return null
+  }
+
+  return {
+    type: "dashboard_laser_pose",
+    seq,
+    time,
+    laser_pose: laserPose,
   }
 }
 
@@ -1244,39 +1313,30 @@ function parseCompactChassisMessage(
   }
 }
 
-function parseCompactMasterControlPose(
+function parseCompactSinglePose(
   value: unknown,
-): MasterControlPoseSnapshot | null {
-  if (!Array.isArray(value) || value.length !== 5) {
+): PoseSourceSnapshot<MasterControlPoseMessage> | null {
+  if (!Array.isArray(value) || value.length !== 4) {
     return null
   }
-  const [availableCode, topic, receivedMs, lidarValue, odinValue] = value
+  const [availableCode, topic, receivedMs, messageValue] = value
   const available = decodeBooleanCode(availableCode)
   const receivedAt = nullableIsoFromEpochMs(receivedMs)
-  const lidarPose = parseCompactPoseSource(
-    lidarValue,
-    parseCompactMasterControlPoseMessage,
-  )
-  const odinOdometry = parseCompactPoseSource(
-    odinValue,
-    parseCompactOdinOdometryPoseMessage,
-  )
-  if (
-    available === null ||
-    !isString(topic) ||
-    receivedAt === undefined ||
-    !lidarPose ||
-    !odinOdometry
-  ) {
+  if (available === null || !isString(topic) || receivedAt === undefined) {
     return null
   }
-
+  const message =
+    messageValue === null
+      ? null
+      : parseCompactMasterControlPoseMessage(messageValue)
+  if (message === undefined) {
+    return null
+  }
   return {
     available,
     topic,
     received_at: receivedAt,
-    lidar_pose: lidarPose,
-    odin_odometry: odinOdometry,
+    message,
   }
 }
 

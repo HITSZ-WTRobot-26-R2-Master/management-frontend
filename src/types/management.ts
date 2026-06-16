@@ -483,6 +483,9 @@ export interface DashboardSnapshot {
   services: ServiceStatus[]
   chassis_state: ChassisStateSnapshot | null
   master_control_pose: MasterControlPoseSnapshot | null
+  odin_odometry: PoseSourceSnapshot<OdinOdometryPoseMessage> | null
+  odin_base_pose: PoseSourceSnapshot<MasterControlPoseMessage> | null
+  laser_pose: PoseSourceSnapshot<MasterControlPoseMessage> | null
   laser_status: LaserStatusSnapshot | null
 }
 
@@ -534,7 +537,7 @@ export interface DashboardPoseFrameMessage {
   type: "dashboard_pose"
   seq: number
   time: string
-  master_control_pose: MasterControlPoseSnapshot | null
+  master_control_pose: PoseSourceSnapshot<MasterControlPoseMessage> | null
 }
 
 export interface DashboardServicesFrameMessage {
@@ -551,11 +554,35 @@ export interface DashboardLaserFrameMessage {
   laser_status: LaserStatusSnapshot | null
 }
 
+export interface DashboardOdinFrameMessage {
+  type: "dashboard_odin"
+  seq: number
+  time: string
+  odin_odometry: PoseSourceSnapshot<OdinOdometryPoseMessage> | null
+}
+
+export interface DashboardOdinBaseFrameMessage {
+  type: "dashboard_odin_base"
+  seq: number
+  time: string
+  odin_base_pose: PoseSourceSnapshot<MasterControlPoseMessage> | null
+}
+
+export interface DashboardLaserPoseFrameMessage {
+  type: "dashboard_laser_pose"
+  seq: number
+  time: string
+  laser_pose: PoseSourceSnapshot<MasterControlPoseMessage> | null
+}
+
 export type DashboardCompactWebSocketMessage =
   | DashboardChassisFrameMessage
   | DashboardPoseFrameMessage
   | DashboardServicesFrameMessage
   | DashboardLaserFrameMessage
+  | DashboardOdinFrameMessage
+  | DashboardOdinBaseFrameMessage
+  | DashboardLaserPoseFrameMessage
   | DashboardErrorMessage
 
 export type DashboardStreamMessage =

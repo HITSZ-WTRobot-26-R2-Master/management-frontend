@@ -66,7 +66,10 @@ import {
 } from "@/components/ui/dialog"
 import { ManagementShell } from "@/components/management/ManagementShell"
 import { ChassisStateCard } from "@/components/management/ChassisStateCard"
-import { MasterControlPoseCard } from "@/components/management/MasterControlPoseCard"
+import { SinglePoseCard } from "@/components/management/SinglePoseCard"
+import { LaserStatusCard } from "@/components/management/LaserStatusCard"
+import type { SinglePoseStreamState } from "@/components/management/SinglePoseCard"
+import { Crosshair, Compass, MapPinned, Navigation } from "lucide-react"
 import { VisionHandinPage } from "@/features/vision-handin/VisionHandinPage"
 import { useDashboardStream } from "@/hooks/useDashboardStream"
 import {
@@ -273,6 +276,10 @@ function ManagementApp() {
   const dashboardStream = useDashboardStream()
   const chassisStateStream = dashboardStream.chassisStateStream
   const masterControlPoseStream = dashboardStream.masterControlPoseStream
+  const odinOdometryStream = dashboardStream.odinOdometryStream
+  const odinBasePoseStream = dashboardStream.odinBasePoseStream
+  const laserPoseStream = dashboardStream.laserPoseStream
+  const laserStatusStream = dashboardStream.laserStatusStream
   const refreshSnapshot = snapshot.refresh
   const refreshCommands = commandDiscovery.refresh
   const refreshRecent = dashboardStream.refreshRecent
@@ -346,8 +353,12 @@ function ManagementApp() {
                 <OverviewTab
                   chassisStateStream={chassisStateStream}
                   dashboardStream={dashboardStream}
+                  laserPoseStream={laserPoseStream}
+                  laserStatusStream={laserStatusStream}
                   lastLoadedAt={snapshot.lastLoadedAt}
                   masterControlPoseStream={masterControlPoseStream}
+                  odinBasePoseStream={odinBasePoseStream}
+                  odinOdometryStream={odinOdometryStream}
                   services={services}
                   onOpenEvents={() => navigate("/events")}
                   onOpenServices={() => navigate("/services")}
@@ -676,16 +687,24 @@ function ConnectionBadge({ state }: { state: ConnectionState }) {
 function OverviewTab({
   chassisStateStream,
   dashboardStream,
+  laserPoseStream,
+  laserStatusStream,
   lastLoadedAt,
   masterControlPoseStream,
+  odinBasePoseStream,
+  odinOdometryStream,
   services,
   onOpenEvents,
   onOpenServices,
 }: {
   chassisStateStream: ReturnType<typeof useDashboardStream>["chassisStateStream"]
   dashboardStream: ReturnType<typeof useDashboardStream>
+  laserPoseStream: ReturnType<typeof useDashboardStream>["laserPoseStream"]
+  laserStatusStream: ReturnType<typeof useDashboardStream>["laserStatusStream"]
   lastLoadedAt: string | null
   masterControlPoseStream: ReturnType<typeof useDashboardStream>["masterControlPoseStream"]
+  odinBasePoseStream: ReturnType<typeof useDashboardStream>["odinBasePoseStream"]
+  odinOdometryStream: ReturnType<typeof useDashboardStream>["odinOdometryStream"]
   services: ServiceStatus[]
   onOpenEvents: () => void
   onOpenServices: () => void
@@ -693,6 +712,7 @@ function OverviewTab({
   const abnormalServices = services.filter(
     (service) => service.overall.level !== "ok",
   )
+  const [laserDetailOpen, setLaserDetailOpen] = useState(false)
 
   return (
     <section className="flex h-full min-h-0 flex-col gap-3 overflow-hidden">
@@ -705,7 +725,43 @@ function OverviewTab({
       />
       <div className="grid min-h-0 gap-3 lg:grid-cols-2">
         <ChassisStateCard stream={chassisStateStream} />
-        <MasterControlPoseCard stream={masterControlPoseStream} />
+        <div className="grid min-h-0 gap-3 lg:grid-cols-2">
+          <SinglePoseCard
+            stream={odinOdometryStream as SinglePoseStreamState}
+            title="Odin Odometry"
+            subtitle="Odin 原始里程计"
+            icon={Compass}
+            showChildFrame
+          />
+          <SinglePoseCard
+            stream={odinBasePoseStream as SinglePoseStreamState}
+            title="Odin 变换位姿"
+            subtitle="/odin_base_pose"
+            icon={MapPinned}
+          />
+          <SinglePoseCard
+            stream={laserPoseStream as SinglePoseStreamState}
+            title="Laser 位姿"
+            subtitle="/laser_pose"
+            icon={Crosshair}
+            onDetailToggle={() => setLaserDetailOpen(!laserDetailOpen)}
+            detailExpanded={laserDetailOpen}
+            detailContent={
+              <LaserStatusCard
+                snapshot={laserStatusStream.snapshot}
+                error={laserStatusStream.error}
+                status={laserStatusStream.status}
+                onRefresh={laserStatusStream.refresh}
+              />
+            }
+          />
+          <SinglePoseCard
+            stream={masterControlPoseStream as SinglePoseStreamState}
+            title="主控输出"
+            subtitle="/to_master_control"
+            icon={Navigation}
+          />
+        </div>
       </div>
       <div className="grid min-h-0 flex-1">
         <OverviewEventsSummary

@@ -27,7 +27,10 @@ import type {
   DashboardSnapshotMessage,
   LaserStatusSnapshot,
   ManagementEvent,
+  MasterControlPoseMessage,
   MasterControlPoseSnapshot,
+  OdinOdometryPoseMessage,
+  PoseSourceSnapshot,
 } from "@/types/management"
 
 const maxRecentEvents = 200
@@ -55,7 +58,7 @@ export interface MasterControlPoseStreamState {
   error: ApiError | null
   lastMessageAt: string | null
   refresh: () => void
-  snapshot: MasterControlPoseSnapshot | null
+  snapshot: PoseSourceSnapshot<MasterControlPoseMessage> | null
   status: DashboardPanelStreamStatus
 }
 
@@ -67,14 +70,41 @@ export interface LaserStatusStreamState {
   status: DashboardPanelStreamStatus
 }
 
+export interface OdinBasePoseStreamState {
+  error: ApiError | null
+  lastMessageAt: string | null
+  refresh: () => void
+  snapshot: PoseSourceSnapshot<MasterControlPoseMessage> | null
+  status: DashboardPanelStreamStatus
+}
+
+export interface LaserPoseStreamState {
+  error: ApiError | null
+  lastMessageAt: string | null
+  refresh: () => void
+  snapshot: PoseSourceSnapshot<MasterControlPoseMessage> | null
+  status: DashboardPanelStreamStatus
+}
+
+export interface OdinOdometryStreamState {
+  error: ApiError | null
+  lastMessageAt: string | null
+  refresh: () => void
+  snapshot: PoseSourceSnapshot<OdinOdometryPoseMessage> | null
+  status: DashboardPanelStreamStatus
+}
+
 interface DashboardStreamInternalState {
   chassisState: ChassisStateSnapshot | null
   error: ApiError | null
   fallbackRefreshAt: string | null
   lastSnapshotAt: string | null
+  laserPose: PoseSourceSnapshot<MasterControlPoseMessage> | null
   laserStatus: LaserStatusSnapshot | null
   loadedRecentAt: string | null
-  masterControlPose: MasterControlPoseSnapshot | null
+  masterControlPose: PoseSourceSnapshot<MasterControlPoseMessage> | null
+  odinBasePose: PoseSourceSnapshot<MasterControlPoseMessage> | null
+  odinOdometry: PoseSourceSnapshot<OdinOdometryPoseMessage> | null
   status: DashboardPanelStreamStatus
 }
 
@@ -82,10 +112,13 @@ export interface DashboardStreamState {
   chassisStateStream: ChassisStateStreamState
   error: ApiError | null
   fallbackRefreshAt: string | null
+  laserPoseStream: LaserPoseStreamState
   laserStatusStream: LaserStatusStreamState
   lastSnapshotAt: string | null
   loadedRecentAt: string | null
   masterControlPoseStream: MasterControlPoseStreamState
+  odinBasePoseStream: OdinBasePoseStreamState
+  odinOdometryStream: OdinOdometryStreamState
   refreshDashboard: () => void
   refreshRecent: () => void
   status: DashboardPanelStreamStatus
@@ -103,6 +136,10 @@ export function useDashboardStream(): DashboardStreamState {
   const latestSeqRef = useRef({
     chassis: -1,
     error: -1,
+    laser: -1,
+    laserPose: -1,
+    odin: -1,
+    odinBase: -1,
     pose: -1,
     services: -1,
     snapshot: -1,
@@ -113,9 +150,13 @@ export function useDashboardStream(): DashboardStreamState {
     chassisState: null,
     error: null,
     fallbackRefreshAt: null,
+    laserPose: null,
+    laserStatus: null,
     lastSnapshotAt: null,
     loadedRecentAt: null,
     masterControlPose: null,
+    odinBasePose: null,
+    odinOdometry: null,
     status: "auth_required",
   })
   const refreshRecent = useCallback(() => {
@@ -186,8 +227,12 @@ export function useDashboardStream(): DashboardStreamState {
         chassisState: null,
         error: AUTH_REQUIRED_ERROR,
         fallbackRefreshAt: null,
+        laserPose: null,
+        laserStatus: null,
         lastSnapshotAt: null,
         masterControlPose: null,
+        odinBasePose: null,
+        odinOdometry: null,
         status: "auth_required",
       }))
       return
@@ -225,6 +270,10 @@ export function useDashboardStream(): DashboardStreamState {
       latestSeqRef.current = {
         chassis: message.seq,
         error: latestSeqRef.current.error,
+        laser: message.seq,
+        laserPose: message.seq,
+        odin: message.seq,
+        odinBase: message.seq,
         pose: message.seq,
         services: message.seq,
         snapshot: message.seq,
@@ -244,8 +293,12 @@ export function useDashboardStream(): DashboardStreamState {
         ...current,
         chassisState: message.snapshot.chassis_state,
         error: null,
+        laserPose: message.snapshot.laser_pose,
+        laserStatus: message.snapshot.laser_status,
         lastSnapshotAt: message.time,
         masterControlPose: message.snapshot.master_control_pose,
+        odinBasePose: message.snapshot.odin_base_pose,
+        odinOdometry: message.snapshot.odin_odometry,
         status: options.status,
       }))
       return true
@@ -339,20 +392,96 @@ export function useDashboardStream(): DashboardStreamState {
         return true
       }
 
-      if (message.seq <= latestSeqRef.current.pose) {
+      if (message.type === "dashboard_pose") {
+        if (message.seq <= latestSeqRef.current.pose) {
+          return true
+        }
+        latestSeqRef.current = {
+          ...latestSeqRef.current,
+          pose: message.seq,
+        }
+        setState((current) => ({
+          ...current,
+          error: null,
+          lastSnapshotAt: message.time,
+          masterControlPose: message.master_control_pose,
+          status: options.status,
+        }))
         return true
       }
-      latestSeqRef.current = {
-        ...latestSeqRef.current,
-        pose: message.seq,
+
+      if (message.type === "dashboard_odin") {
+        if (message.seq <= latestSeqRef.current.odin) {
+          return true
+        }
+        latestSeqRef.current = {
+          ...latestSeqRef.current,
+          odin: message.seq,
+        }
+        setState((current) => ({
+          ...current,
+          error: null,
+          lastSnapshotAt: message.time,
+          odinOdometry: message.odin_odometry,
+          status: options.status,
+        }))
+        return true
       }
-      setState((current) => ({
-        ...current,
-        error: null,
-        lastSnapshotAt: message.time,
-        masterControlPose: message.master_control_pose,
-        status: options.status,
-      }))
+
+      if (message.type === "dashboard_odin_base") {
+        if (message.seq <= latestSeqRef.current.odinBase) {
+          return true
+        }
+        latestSeqRef.current = {
+          ...latestSeqRef.current,
+          odinBase: message.seq,
+        }
+        setState((current) => ({
+          ...current,
+          error: null,
+          lastSnapshotAt: message.time,
+          odinBasePose: message.odin_base_pose,
+          status: options.status,
+        }))
+        return true
+      }
+
+      if (message.type === "dashboard_laser_pose") {
+        if (message.seq <= latestSeqRef.current.laserPose) {
+          return true
+        }
+        latestSeqRef.current = {
+          ...latestSeqRef.current,
+          laserPose: message.seq,
+        }
+        setState((current) => ({
+          ...current,
+          error: null,
+          lastSnapshotAt: message.time,
+          laserPose: message.laser_pose,
+          status: options.status,
+        }))
+        return true
+      }
+
+      if (message.type === "dashboard_laser") {
+        if (message.seq <= latestSeqRef.current.laser) {
+          return true
+        }
+        latestSeqRef.current = {
+          ...latestSeqRef.current,
+          laser: message.seq,
+        }
+        setState((current) => ({
+          ...current,
+          error: null,
+          lastSnapshotAt: message.time,
+          laserStatus: message.laser_status,
+          status: options.status,
+        }))
+        return true
+      }
+
       return true
     }
 
@@ -659,14 +788,82 @@ export function useDashboardStream(): DashboardStreamState {
       state.status,
     ],
   )
+  const odinOdometryStream = useMemo<OdinOdometryStreamState>(
+    () => ({
+      error: state.error,
+      lastMessageAt: state.lastSnapshotAt,
+      refresh: refreshDashboard,
+      snapshot: state.odinOdometry,
+      status: state.status,
+    }),
+    [
+      refreshDashboard,
+      state.error,
+      state.lastSnapshotAt,
+      state.odinOdometry,
+      state.status,
+    ],
+  )
+  const odinBasePoseStream = useMemo<OdinBasePoseStreamState>(
+    () => ({
+      error: state.error,
+      lastMessageAt: state.lastSnapshotAt,
+      refresh: refreshDashboard,
+      snapshot: state.odinBasePose,
+      status: state.status,
+    }),
+    [
+      refreshDashboard,
+      state.error,
+      state.lastSnapshotAt,
+      state.odinBasePose,
+      state.status,
+    ],
+  )
+  const laserPoseStream = useMemo<LaserPoseStreamState>(
+    () => ({
+      error: state.error,
+      lastMessageAt: state.lastSnapshotAt,
+      refresh: refreshDashboard,
+      snapshot: state.laserPose,
+      status: state.status,
+    }),
+    [
+      refreshDashboard,
+      state.error,
+      state.lastSnapshotAt,
+      state.laserPose,
+      state.status,
+    ],
+  )
+  const laserStatusStream = useMemo<LaserStatusStreamState>(
+    () => ({
+      error: state.error,
+      lastMessageAt: state.lastSnapshotAt,
+      refresh: refreshDashboard,
+      snapshot: state.laserStatus,
+      status: state.status,
+    }),
+    [
+      refreshDashboard,
+      state.error,
+      state.lastSnapshotAt,
+      state.laserStatus,
+      state.status,
+    ],
+  )
 
   return {
     chassisStateStream,
     error: state.error,
     fallbackRefreshAt: state.fallbackRefreshAt,
+    laserPoseStream,
+    laserStatusStream,
     lastSnapshotAt: state.lastSnapshotAt,
     loadedRecentAt: state.loadedRecentAt,
     masterControlPoseStream,
+    odinBasePoseStream,
+    odinOdometryStream,
     refreshDashboard,
     refreshRecent,
     status: state.status,
@@ -690,6 +887,10 @@ function initialDashboardSeqState() {
   return {
     chassis: -1,
     error: -1,
+    laser: -1,
+    laserPose: -1,
+    odin: -1,
+    odinBase: -1,
     pose: -1,
     services: -1,
     snapshot: -1,
