@@ -4,6 +4,7 @@ import {
   CircleHelp,
 } from "lucide-react"
 import { useMemo } from "react"
+import type { LucideIcon } from "lucide-react"
 import { formatMillimeterPrecision, formatRosTime } from "@/lib/display-format"
 import { cn } from "@/lib/utils"
 import type {
@@ -56,12 +57,12 @@ export function SinglePoseCard({
     [stream.error, stream.snapshot, stream.status, defaultSubtitle],
   )
   const msg = stream.snapshot?.message ?? null
-  const hasPose = Boolean(msg)
+  const hasPose = msg !== null
   const clickable = Boolean(onDetailToggle)
   const isOdinMsg = (
-    msg: PoseMessage | null,
-  ): msg is OdinOdometryPoseMessage =>
-    msg !== null && "child_frame_id" in msg
+    m: PoseMessage,
+  ): m is OdinOdometryPoseMessage =>
+    "child_frame_id" in m
 
   return (
     <section className="flex min-h-0 flex-col rounded-lg border border-border bg-card shadow-sm">
@@ -208,6 +209,6 @@ function summarizePose(
     icon: stale ? AlertTriangle : (CheckCircle2 as LucideIcon),
     label: stale ? "位姿过期" : "实时",
     subtitle: snapshot.topic,
-    tone: (stale ? "warning" : "success") as const,
+    tone: (stale ? "warning" : "success") as CardTone,
   }
 }

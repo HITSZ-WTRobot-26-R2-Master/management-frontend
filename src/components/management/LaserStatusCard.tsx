@@ -40,7 +40,7 @@ export function LaserStatusCard({
 }: {
   snapshot: LaserStatusSnapshot | null
   error: ApiError | null
-  status: "connecting" | "live" | "fallback"
+  status: "auth_required" | "connecting" | "live" | "fallback" | "error"
   onRefresh: () => void
 }) {
   const [showDetail, setShowDetail] = useState(false)
@@ -321,7 +321,7 @@ function DetailSection({
   )
 }
 
-function DetailRow({ label, value }: { label: string; value: string | null }) {
+function DetailRow({ label, value }: { label: string; value: string | null | undefined }) {
   if (value == null) return null
   return (
     <div className="flex justify-between gap-2 text-xs">
@@ -334,7 +334,7 @@ function DetailRow({ label, value }: { label: string; value: string | null }) {
 function summarizeLaserStatus(
   snapshot: LaserStatusSnapshot | null,
   error: ApiError | null,
-  status: "connecting" | "live" | "fallback",
+  status: "auth_required" | "connecting" | "live" | "fallback" | "error",
 ) {
   if (error) {
     return {
@@ -374,6 +374,6 @@ function summarizeLaserStatus(
     icon: (localized ? CheckCircle2 : AlertTriangle) as LucideIcon,
     label: stateLabel,
     subtitle: `${msg.region_name ?? "无区域"} · beams=${msg.selected_valid_beam_count}/${msg.selected_beam_count}`,
-    tone: (localized ? "success" : "warning") as const,
+    tone: (localized ? "success" : "warning") as CardTone,
   }
 }

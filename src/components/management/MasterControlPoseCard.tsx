@@ -2,7 +2,6 @@ import {
   AlertTriangle,
   CheckCircle2,
   CircleHelp,
-  Compass,
   MapPinned,
   RefreshCw,
 } from "lucide-react"
@@ -14,8 +13,6 @@ import { cn } from "@/lib/utils"
 import type {
   ApiError,
   MasterControlPoseMessage,
-  MasterControlPoseSnapshot,
-  OdinOdometryPoseMessage,
   PoseSourceSnapshot,
 } from "@/types/management"
 
@@ -35,14 +32,14 @@ export function MasterControlPoseCard({
 }: {
   stream: MasterControlPoseStreamState
 }) {
+  const snapshot = stream.snapshot
   const summary = useMemo(
     () =>
-      summarizeMasterControlPose(stream.snapshot, stream.error, stream.status),
-    [stream.error, stream.snapshot, stream.status],
+      summarizeMasterControlPose(snapshot, stream.error, stream.status),
+    [stream.error, snapshot, stream.status],
   )
-  const lidarPose = stream.snapshot?.lidar_pose ?? null
-  const odinOdometry = stream.snapshot?.odin_odometry ?? null
-  const hasPose = Boolean(lidarPose?.message || odinOdometry?.message)
+  const msg = snapshot?.message ?? null
+  const hasPose = Boolean(msg)
 
   return (
     <section className="flex min-h-0 flex-col rounded-lg border border-border bg-card shadow-sm">
@@ -75,30 +72,15 @@ export function MasterControlPoseCard({
           </span>
         </div>
 
-        {hasPose ? (
-          <div className="mt-2 grid gap-2 sm:grid-cols-2">
-            {odinOdometry ? (
-              <PoseSourceBlock
-                icon={Compass}
-                label="Odin odometry"
-                source={odinOdometry}
-                frameLabel={
-                  odinOdometry.message?.child_frame_id || "odin_baselink 未设置"
-                }
-                frameDetail={odinOdometry.message?.header.frame_id || "odom 未设置"}
-              />
-            ) : null}
-            {lidarPose ? (
-              <PoseSourceBlock
-                icon={MapPinned}
-                label="Lidar pose publisher"
-                source={lidarPose}
-                frameLabel={
-                  lidarPose.message?.header.frame_id || "ideal_world 未设置"
-                }
-                frameDetail={lidarPose.topic}
-              />
-            ) : null}
+        {hasPose && snapshot && msg ? (
+          <div className="mt-2 grid gap-2 sm:grid-cols-1">
+            <PoseSourceBlock
+              icon={MapPinned}
+              label="Master Control"
+              source={{ available: true, topic: snapshot.topic, received_at: snapshot.received_at, message: msg }}
+              frameLabel={msg.header.frame_id || "未设置"}
+              frameDetail={snapshot.topic}
+            />
           </div>
         ) : (
           <div className="mt-4 rounded-md border border-dashed border-border bg-muted/40 px-4 py-5 text-sm text-muted-foreground">
@@ -132,7 +114,7 @@ function StatePill({
   )
 }
 
-type PoseMessage = MasterControlPoseMessage | OdinOdometryPoseMessage
+type PoseMessage = MasterControlPoseMessage
 
 function PoseSourceBlock({
   frameDetail,
@@ -195,7 +177,7 @@ function PoseSourceBlock({
 }
 
 function summarizeMasterControlPose(
-  snapshot: MasterControlPoseSnapshot | null,
+  snapshot: PoseSourceSnapshot<MasterControlPoseMessage> | null,
   error: ApiError | null,
   status: MasterControlPoseStreamState["status"],
 ) {
@@ -206,7 +188,7 @@ function summarizeMasterControlPose(
       icon: AlertTriangle,
       label: "需要令牌",
       subtitle: "等待管理后端认证",
-      tone: "warning" as const,
+      tone: "warning" as CardTone,
     }
   }
 
@@ -217,22 +199,22 @@ function summarizeMasterControlPose(
       icon: AlertTriangle,
       label: "读取失败",
       subtitle: "无法读取 to_master_control",
-      tone: "error" as const,
+      tone: "error" as CardTone,
     }
   }
 
-  if (!snapshot || (!snapshot.lidar_pose.message && !snapshot.odin_odometry.message)) {
+  if (!snapshot || !snapshot.message) {
     return {
       detail: snapshot?.topic ? `topic ${snapshot.topic}` : "等待首帧",
-      emptyText: "management agent 尚未收到 Odin odometry 或 lidar pose 消息。",
+      emptyText: "management agent 尚未收到 to_master_control 消息。",
       icon: CircleHelp,
       label: status === "connecting" ? "连接中" : "无消息",
-      subtitle: "等待 odin_ros_driver / pose_node 输出",
-      tone: "neutral" as const,
+      subtitle: "等待 pose_node 输出",
+      tone: "neutral" as CardTone,
     }
   }
 
-  const receivedAt = latestPoseReceivedAt(snapshot)
+  const receivedAt = snapshot.received_at
   const ageMs = ageFromIso(receivedAt)
   const stale = ageMs !== null && ageMs > staleThresholdMs
 
@@ -243,37 +225,9 @@ function summarizeMasterControlPose(
     emptyText: "",
     icon: stale ? AlertTriangle : CheckCircle2,
     label: stale ? "位姿过期" : status === "fallback" ? "REST 回退" : "实时位姿",
-    subtitle: poseFrameSummary(snapshot),
-    tone: stale ? ("warning" as const) : ("success" as const),
+    subtitle: snapshot.message.header.frame_id || snapshot.topic,
+    tone: (stale ? "warning" : "success") as CardTone,
   }
-}
-
-function poseFrameSummary(snapshot: MasterControlPoseSnapshot) {
-  const odinFrame =
-    snapshot.odin_odometry.message?.child_frame_id || "odin_baselink"
-  const lidarFrame = snapshot.lidar_pose.message?.header.frame_id || "ideal_world"
-
-  return `${odinFrame} / ${lidarFrame}`
-}
-
-function latestPoseReceivedAt(snapshot: MasterControlPoseSnapshot) {
-  const receivedAtValues = [
-    snapshot.lidar_pose.message ? snapshot.lidar_pose.received_at : null,
-    snapshot.odin_odometry.message ? snapshot.odin_odometry.received_at : null,
-    snapshot.received_at,
-  ].filter((value): value is string => Boolean(value))
-  let latestValue: string | null = null
-  let latestTime = Number.NEGATIVE_INFINITY
-
-  for (const value of receivedAtValues) {
-    const time = Date.parse(value)
-    if (Number.isFinite(time) && time > latestTime) {
-      latestValue = value
-      latestTime = time
-    }
-  }
-
-  return latestValue ?? receivedAtValues[0] ?? null
 }
 
 function PoseAxisValue({ axis, value }: { axis: "X" | "Y" | "Z"; value: number }) {

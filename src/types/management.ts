@@ -314,6 +314,7 @@ export interface MasterControlPoseSnapshot {
   available: boolean
   topic: string
   received_at: string | null
+  message?: MasterControlPoseMessage | null
   lidar_pose: PoseSourceSnapshot<MasterControlPoseMessage>
   odin_odometry: PoseSourceSnapshot<OdinOdometryPoseMessage>
 }

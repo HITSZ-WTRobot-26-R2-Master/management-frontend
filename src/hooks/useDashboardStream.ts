@@ -295,7 +295,14 @@ export function useDashboardStream(): DashboardStreamState {
         laserPose: message.snapshot.laser_pose,
         laserStatus: message.snapshot.laser_status,
         lastSnapshotAt: message.time,
-        masterControlPose: message.snapshot.master_control_pose,
+        masterControlPose: message.snapshot.master_control_pose
+          ? {
+              available: message.snapshot.master_control_pose.available,
+              topic: message.snapshot.master_control_pose.topic,
+              received_at: message.snapshot.master_control_pose.received_at,
+              message: message.snapshot.master_control_pose.message ?? null,
+            }
+          : null,
         odinBasePose: message.snapshot.odin_base_pose,
         odinOdometry: message.snapshot.odin_odometry,
         status: options.status,

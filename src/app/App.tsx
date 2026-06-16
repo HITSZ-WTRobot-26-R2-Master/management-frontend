@@ -67,9 +67,8 @@ import {
 import { ManagementShell } from "@/components/management/ManagementShell"
 import { ChassisStateCard } from "@/components/management/ChassisStateCard"
 import { SinglePoseCard } from "@/components/management/SinglePoseCard"
-import { LaserStatusCard } from "@/components/management/LaserStatusCard"
 import type { SinglePoseStreamState } from "@/components/management/SinglePoseCard"
-import { Crosshair, Compass, MapPinned, Navigation } from "lucide-react"
+import { LaserStatusCard } from "@/components/management/LaserStatusCard"
 import { VisionHandinPage } from "@/features/vision-handin/VisionHandinPage"
 import { useDashboardStream } from "@/hooks/useDashboardStream"
 import {
@@ -730,20 +729,17 @@ function OverviewTab({
             stream={odinOdometryStream as SinglePoseStreamState}
             title="Odin Odometry"
             subtitle="Odin 原始里程计"
-            icon={Compass}
             showChildFrame
           />
           <SinglePoseCard
             stream={odinBasePoseStream as SinglePoseStreamState}
             title="Odin 变换位姿"
             subtitle="/odin_base_pose"
-            icon={MapPinned}
           />
           <SinglePoseCard
             stream={laserPoseStream as SinglePoseStreamState}
             title="Laser 位姿"
             subtitle="/laser_pose"
-            icon={Crosshair}
             onDetailToggle={() => setLaserDetailOpen(!laserDetailOpen)}
             detailExpanded={laserDetailOpen}
             detailContent={
@@ -759,7 +755,6 @@ function OverviewTab({
             stream={masterControlPoseStream as SinglePoseStreamState}
             title="主控输出"
             subtitle="/to_master_control"
-            icon={Navigation}
           />
         </div>
       </div>
