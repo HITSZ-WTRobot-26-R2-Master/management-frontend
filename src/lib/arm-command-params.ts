@@ -26,9 +26,9 @@ export const ARM_COMMAND_PARAMS: Record<string, ArmCommandParamDef> = {
     description: "将已吸住的卷轴放入内部存储。length_to_bottom=吸盘到卷轴底面距离(m)",
   },
   arm_place_from_internal_prepare: {
-    fields: ["x", "y"],
-    defaults: { x: 0.3, y: 0.3 },
-    description: "从内部存储取出卷轴（准备）。x=架X坐标(m), y=架层底面高度(m)",
+    fields: [],
+    defaults: {},
+    description: "从内部存储取出卷轴（准备）。无需参数，自动执行预设路径",
   },
   arm_place_from_internal_do: {
     fields: ["x", "y"],
