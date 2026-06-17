@@ -284,6 +284,7 @@ export interface RosHeader {
 
 export interface MasterControlPoseMessage {
   header: RosHeader
+  source: string
   x: number
   y: number
   z: number

@@ -867,6 +867,7 @@ function isMasterControlPoseMessage(
   return (
     isRecord(value) &&
     isRosHeader(value.header) &&
+    isString(value.source) &&
     isNumber(value.x) &&
     isNumber(value.y) &&
     isNumber(value.z) &&
@@ -1399,15 +1400,16 @@ function parseCompactOdinPose(
 function parseCompactMasterControlPoseMessage(
   value: unknown,
 ): MasterControlPoseMessage | undefined {
-  if (!Array.isArray(value) || value.length !== 9) {
+  if (!Array.isArray(value) || value.length !== 10) {
     return undefined
   }
-  const [stampSec, stampNanosec, frameId, x, y, z, rollDeg, pitchDeg, yawDeg] =
+  const [stampSec, stampNanosec, frameId, source, x, y, z, rollDeg, pitchDeg, yawDeg] =
     value
   if (
     !isNumber(stampSec) ||
     !isNumber(stampNanosec) ||
     !isString(frameId) ||
+    !isString(source) ||
     !isNumber(x) ||
     !isNumber(y) ||
     !isNumber(z) ||
@@ -1426,6 +1428,7 @@ function parseCompactMasterControlPoseMessage(
       },
       frame_id: frameId,
     },
+    source,
     x,
     y,
     z,
@@ -1438,15 +1441,16 @@ function parseCompactMasterControlPoseMessage(
 function parseCompactMasterControlPoseMessageNanTolerant(
   value: unknown,
 ): MasterControlPoseMessage | null {
-  if (!Array.isArray(value) || value.length !== 9) {
+  if (!Array.isArray(value) || value.length !== 10) {
     return null
   }
-  const [stampSec, stampNanosec, frameId, x, y, z, rollDeg, pitchDeg, yawDeg] =
+  const [stampSec, stampNanosec, frameId, source, x, y, z, rollDeg, pitchDeg, yawDeg] =
     value
   if (
     !isNumber(stampSec) ||
     !isNumber(stampNanosec) ||
     !isString(frameId) ||
+    !isString(source) ||
     typeof x !== "number" ||
     typeof y !== "number" ||
     typeof z !== "number" ||
@@ -1465,6 +1469,7 @@ function parseCompactMasterControlPoseMessageNanTolerant(
       },
       frame_id: frameId,
     },
+    source,
     x,
     y,
     z,

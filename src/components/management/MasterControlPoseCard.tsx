@@ -163,6 +163,10 @@ function PoseSourceBlock({
             <span className="break-words">{frameDetail}</span>{" "}
             <span aria-hidden="true">·</span>{" "}
             <span className="whitespace-nowrap break-normal">
+              source {message.source}
+            </span>{" "}
+            <span aria-hidden="true">·</span>{" "}
+            <span className="whitespace-nowrap break-normal">
               {formatRosTime(message.header.stamp)}
             </span>
           </p>

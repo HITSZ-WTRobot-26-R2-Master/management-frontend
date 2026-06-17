@@ -110,6 +110,14 @@ export function SinglePoseCard({
                     : msg.header.frame_id}
                 </span>
                 {" · "}
+                {"source" in msg && (
+                  <>
+                    <span className="whitespace-nowrap">
+                      source {(msg as MasterControlPoseMessage).source}
+                    </span>
+                    {" · "}
+                  </>
+                )}
                 <span className="whitespace-nowrap">
                   {formatRosTime(msg.header.stamp)}
                 </span>

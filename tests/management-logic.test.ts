@@ -630,46 +630,24 @@ describe("master-control pose API contract", () => {
           1,
           "to_master_control",
           timestampMs,
-          [
-            1,
-            "to_master_control",
-            timestampMs,
-            [123, 456000000, "ideal_world", 1.25, -2.5, 0.75, 0, 0, 90],
-          ],
-          [
-            1,
-            "/odin1/odometry",
-            timestampMs,
-            [124, 789000000, "odom", "odin1_base_link", 3.5, -4.25, 0.5, 0, 0, 180],
-          ],
+          [123, 456000000, "ideal_world", "odin", 1.25, -2.5, 0.75, 0, 0, 90],
         ],
       ]),
     ).toMatchObject({
       type: "dashboard_pose",
       seq: 9,
       master_control_pose: {
-        lidar_pose: {
-          topic: "to_master_control",
-          message: {
-            header: {
-              frame_id: "ideal_world",
-              stamp: {
-                sec: 123,
-                nanosec: 456000000,
-              },
+        topic: "to_master_control",
+        message: {
+          header: {
+            frame_id: "ideal_world",
+            stamp: {
+              sec: 123,
+              nanosec: 456000000,
             },
-            yaw_deg: 90,
           },
-        },
-        odin_odometry: {
-          topic: "/odin1/odometry",
-          message: {
-            child_frame_id: "odin1_base_link",
-            header: {
-              frame_id: "odom",
-            },
-            yaw_deg: 180,
-          },
+          source: "odin",
+          yaw_deg: 90,
         },
       },
     })
@@ -1502,6 +1480,7 @@ function masterControlPoseSnapshot() {
           },
           frame_id: "ideal_world",
         },
+        source: "odin",
         x: 1.25,
         y: -2.5,
         z: 0.75,
