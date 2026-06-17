@@ -40,17 +40,15 @@ export function SinglePoseCard({
   title,
   subtitle: defaultSubtitle,
   showChildFrame,
-  onDetailToggle,
-  detailExpanded,
-  detailContent,
+  onClick,
+  nanPoseMessage,
 }: {
   stream: SinglePoseStreamState
   title: string
   subtitle: string
   showChildFrame?: boolean
-  onDetailToggle?: () => void
-  detailExpanded?: boolean
-  detailContent?: React.ReactNode
+  onClick?: () => void
+  nanPoseMessage?: string
 }) {
   const summary = useMemo(
     () => summarizePose(stream.snapshot, stream.error, stream.status, defaultSubtitle),
@@ -58,7 +56,8 @@ export function SinglePoseCard({
   )
   const msg = stream.snapshot?.message ?? null
   const hasPose = msg !== null
-  const clickable = Boolean(onDetailToggle)
+  const hasNanPose = hasPose && isNaN(msg.x) && isNaN(msg.y) && isNaN(msg.z)
+  const clickable = Boolean(onClick)
   const isOdinMsg = (
     m: PoseMessage,
   ): m is OdinOdometryPoseMessage =>
@@ -77,7 +76,7 @@ export function SinglePoseCard({
 
       <div
         className={cn("min-h-0 overflow-y-auto p-2", clickable && "cursor-pointer")}
-        onClick={clickable ? onDetailToggle : undefined}
+        onClick={clickable ? onClick : undefined}
       >
         <div className="flex flex-wrap items-center gap-1.5">
           <StatePill tone={summary.tone} icon={summary.icon}>
@@ -86,34 +85,37 @@ export function SinglePoseCard({
         </div>
 
         {hasPose ? (
-          <>
-            <div className="mt-1.5 flex flex-wrap gap-1 font-mono text-sm font-semibold text-card-foreground">
-              <PoseAxisValue axis="X" value={msg.x} />
-              <PoseAxisValue axis="Y" value={msg.y} />
-              <PoseAxisValue axis="Z" value={msg.z} />
-            </div>
-            <div className="mt-0.5 flex flex-wrap gap-x-1 gap-y-0.5 text-xs text-muted-foreground">
-              <PoseAngleValue axis="R" value={(msg as MasterControlPoseMessage).roll_deg ?? 0} />
-              <span aria-hidden="true">/</span>
-              <PoseAngleValue axis="P" value={(msg as MasterControlPoseMessage).pitch_deg ?? 0} />
-              <span aria-hidden="true">/</span>
-              <PoseAngleValue axis="Y" value={(msg as MasterControlPoseMessage).yaw_deg ?? 0} />
-            </div>
-            <p className="mt-0.5 text-xs text-muted-foreground">
-              <span className="break-words">
-                {showChildFrame && isOdinMsg(msg)
-                  ? msg.child_frame_id
-                  : msg.header.frame_id}
-              </span>
-              {" · "}
-              <span className="whitespace-nowrap">
-                {formatRosTime(msg.header.stamp)}
-              </span>
+          hasNanPose && nanPoseMessage ? (
+            <p className="mt-2 break-words text-xs font-medium text-muted-foreground">
+              {nanPoseMessage}
             </p>
-            {detailExpanded && detailContent && (
-              <div className="mt-2 border-t border-border pt-2">{detailContent}</div>
-            )}
-          </>
+          ) : (
+            <>
+              <div className="mt-1.5 flex flex-wrap gap-1 font-mono text-sm font-semibold text-card-foreground">
+                <PoseAxisValue axis="X" value={msg.x} />
+                <PoseAxisValue axis="Y" value={msg.y} />
+                <PoseAxisValue axis="Z" value={msg.z} />
+              </div>
+              <div className="mt-0.5 flex flex-wrap gap-x-1 gap-y-0.5 text-xs text-muted-foreground">
+                <PoseAngleValue axis="R" value={(msg as MasterControlPoseMessage).roll_deg ?? 0} />
+                <span aria-hidden="true">/</span>
+                <PoseAngleValue axis="P" value={(msg as MasterControlPoseMessage).pitch_deg ?? 0} />
+                <span aria-hidden="true">/</span>
+                <PoseAngleValue axis="Y" value={(msg as MasterControlPoseMessage).yaw_deg ?? 0} />
+              </div>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                <span className="break-words">
+                  {showChildFrame && isOdinMsg(msg)
+                    ? msg.child_frame_id
+                    : msg.header.frame_id}
+                </span>
+                {" · "}
+                <span className="whitespace-nowrap">
+                  {formatRosTime(msg.header.stamp)}
+                </span>
+              </p>
+            </>
+          )
         ) : (
           <p className="mt-2 break-words text-xs text-muted-foreground">
             {summary.emptyText}

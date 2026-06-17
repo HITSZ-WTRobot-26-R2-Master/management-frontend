@@ -13,6 +13,7 @@ import type {
   DockerStatus,
   HealthResponse,
   LaserStatusSnapshot,
+  LaserDetailWebSocketMessage,
   ManagementEvent,
   MasterControlPoseMessage,
   MasterControlPoseSnapshot,
@@ -406,6 +407,14 @@ export function buildBlockStatesWebSocketUrl(baseUrl: string, token: string) {
   return buildManagementWebSocketEndpointUrl(
     baseUrl,
     "/ws/block-states",
+    token,
+  ).toString()
+}
+
+export function buildLaserDetailWebSocketUrl(baseUrl: string, token: string) {
+  return buildManagementWebSocketEndpointUrl(
+    baseUrl,
+    "/ws/laser-detail",
     token,
   ).toString()
 }
@@ -1053,8 +1062,23 @@ function parseDashboardLaserPoseFrame(
   if (value.length !== 4) {
     return null
   }
-  const laserPose = parseCompactSinglePose(value[3])
-  if (!laserPose) {
+
+  const snapshotValue = value[3]
+  if (!Array.isArray(snapshotValue) || snapshotValue.length !== 4) {
+    return null
+  }
+  const [availableCode, topic, receivedMs, messageValue] = snapshotValue
+  const available = decodeBooleanCode(availableCode)
+  const receivedAt = nullableIsoFromEpochMs(receivedMs)
+  if (available === null || !isString(topic) || receivedAt === undefined) {
+    return null
+  }
+
+  const message =
+    messageValue === null
+      ? null
+      : parseCompactMasterControlPoseMessageNanTolerant(messageValue)
+  if (message === null && messageValue !== null) {
     return null
   }
 
@@ -1062,7 +1086,12 @@ function parseDashboardLaserPoseFrame(
     type: "dashboard_laser_pose",
     seq,
     time,
-    laser_pose: laserPose,
+    laser_pose: {
+      available,
+      topic,
+      received_at: receivedAt,
+      message,
+    },
   }
 }
 
@@ -1406,6 +1435,45 @@ function parseCompactMasterControlPoseMessage(
   }
 }
 
+function parseCompactMasterControlPoseMessageNanTolerant(
+  value: unknown,
+): MasterControlPoseMessage | null {
+  if (!Array.isArray(value) || value.length !== 9) {
+    return null
+  }
+  const [stampSec, stampNanosec, frameId, x, y, z, rollDeg, pitchDeg, yawDeg] =
+    value
+  if (
+    !isNumber(stampSec) ||
+    !isNumber(stampNanosec) ||
+    !isString(frameId) ||
+    typeof x !== "number" ||
+    typeof y !== "number" ||
+    typeof z !== "number" ||
+    typeof rollDeg !== "number" ||
+    typeof pitchDeg !== "number" ||
+    typeof yawDeg !== "number"
+  ) {
+    return null
+  }
+
+  return {
+    header: {
+      stamp: {
+        sec: stampSec,
+        nanosec: stampNanosec,
+      },
+      frame_id: frameId,
+    },
+    x,
+    y,
+    z,
+    roll_deg: rollDeg,
+    pitch_deg: pitchDeg,
+    yaw_deg: yawDeg,
+  }
+}
+
 function parseCompactOdinOdometryPoseMessage(
   value: unknown,
 ): OdinOdometryPoseMessage | undefined {
@@ -1657,4 +1725,41 @@ function isNonNegativeInteger(value: unknown): value is number {
 
 function isBoolean(value: unknown): value is boolean {
   return typeof value === "boolean"
+}
+
+export function parseLaserDetailSocketMessage(
+  data: unknown,
+): LaserDetailWebSocketMessage | null {
+  if (typeof data !== "string") {
+    return null
+  }
+  try {
+    const parsed = JSON.parse(data) as Record<string, unknown>
+    if (
+      parsed.type === "laser_detail_snapshot" &&
+      typeof parsed.time === "string"
+    ) {
+      return {
+        type: "laser_detail_snapshot",
+        time: parsed.time as string,
+        snapshot: (parsed.snapshot as LaserStatusSnapshot) ?? null,
+      }
+    }
+    if (
+      parsed.type === "laser_detail_error" &&
+      typeof parsed.time === "string" &&
+      typeof parsed.code === "string" &&
+      typeof parsed.message === "string"
+    ) {
+      return {
+        type: "laser_detail_error",
+        time: parsed.time as string,
+        code: parsed.code as string,
+        message: parsed.message as string,
+      }
+    }
+    return null
+  } catch {
+    return null
+  }
 }

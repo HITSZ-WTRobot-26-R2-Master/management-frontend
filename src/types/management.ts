@@ -576,6 +576,23 @@ export interface DashboardLaserPoseFrameMessage {
   laser_pose: PoseSourceSnapshot<MasterControlPoseMessage> | null
 }
 
+export interface LaserDetailSnapshotMessage {
+  type: "laser_detail_snapshot"
+  time: string
+  snapshot: LaserStatusSnapshot | null
+}
+
+export interface LaserDetailErrorMessage {
+  type: "laser_detail_error"
+  time: string
+  code: ApiErrorCode
+  message: string
+}
+
+export type LaserDetailWebSocketMessage =
+  | LaserDetailSnapshotMessage
+  | LaserDetailErrorMessage
+
 export type DashboardCompactWebSocketMessage =
   | DashboardChassisFrameMessage
   | DashboardPoseFrameMessage

@@ -11,6 +11,7 @@ import type { LucideIcon } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type {
   ApiError,
+  LaserStatusMessage,
   LaserStatusSnapshot,
 } from "@/types/management"
 
@@ -37,11 +38,13 @@ export function LaserStatusCard({
   error,
   status,
   onRefresh,
+  detailMessage,
 }: {
   snapshot: LaserStatusSnapshot | null
   error: ApiError | null
   status: "auth_required" | "connecting" | "live" | "fallback" | "error"
   onRefresh: () => void
+  detailMessage?: LaserStatusMessage | null
 }) {
   const [showDetail, setShowDetail] = useState(false)
   const summary = useMemo(
@@ -49,6 +52,7 @@ export function LaserStatusCard({
     [snapshot, error, status],
   )
   const msg = snapshot?.message
+  const detailMsg = detailMessage ?? msg
 
   return (
     <section className="flex min-h-0 flex-col rounded-lg border border-border bg-card shadow-sm">
@@ -141,29 +145,29 @@ export function LaserStatusCard({
             {showDetail && (
               <div className="mt-1 space-y-2 text-sm">
                 <DetailSection title="求解器">
-                  <DetailRow label="beam_mode" value={msg.solver_debug?.beam_mode} />
-                  <DetailRow label="x_beam" value={msg.solver_debug?.x_beam} />
+                  <DetailRow label="beam_mode" value={detailMsg?.solver_debug?.beam_mode} />
+                  <DetailRow label="x_beam" value={detailMsg?.solver_debug?.x_beam} />
                   <DetailRow
                     label="theta_side"
                     value={
-                      msg.solver_debug?.theta_side_deg != null
-                        ? `${msg.solver_debug.theta_side_deg.toFixed(2)} deg`
+                      detailMsg?.solver_debug?.theta_side_deg != null
+                        ? `${detailMsg.solver_debug.theta_side_deg.toFixed(2)} deg`
                         : null
                     }
                   />
                   <DetailRow
                     label="correction"
                     value={
-                      msg.solver_debug?.correction_debug?.delta_xy_norm_m != null
-                        ? `${(msg.solver_debug.correction_debug.delta_xy_norm_m * 1000).toFixed(1)} mm`
+                      detailMsg?.solver_debug?.correction_debug?.delta_xy_norm_m != null
+                        ? `${(detailMsg.solver_debug.correction_debug.delta_xy_norm_m * 1000).toFixed(1)} mm`
                         : null
                     }
                   />
                   <DetailRow
                     label="residual"
                     value={
-                      msg.solver_debug?.residual_debug?.mean_residual_m != null
-                        ? `${(msg.solver_debug.residual_debug.mean_residual_m * 1000).toFixed(1)} mm`
+                      detailMsg?.solver_debug?.residual_debug?.mean_residual_m != null
+                        ? `${(detailMsg.solver_debug.residual_debug.mean_residual_m * 1000).toFixed(1)} mm`
                         : null
                     }
                   />
@@ -173,28 +177,28 @@ export function LaserStatusCard({
                   <DetailRow
                     label="transport_delay"
                     value={
-                      msg.timing_debug?.transport_delay_ms != null
-                        ? `${msg.timing_debug.transport_delay_ms.toFixed(1)} ms`
+                      detailMsg?.timing_debug?.transport_delay_ms != null
+                        ? `${detailMsg.timing_debug.transport_delay_ms.toFixed(1)} ms`
                         : null
                     }
                   />
                   <DetailRow
                     label="frame_age"
                     value={
-                      msg.timing_debug?.range_frame_age_ms != null
-                        ? `${msg.timing_debug.range_frame_age_ms.toFixed(1)} ms`
+                      detailMsg?.timing_debug?.range_frame_age_ms != null
+                        ? `${detailMsg.timing_debug.range_frame_age_ms.toFixed(1)} ms`
                         : null
                     }
                   />
                   <DetailRow
                     label="frame_count"
-                    value={msg.timing_debug?.range_frame_count?.toString() ?? null}
+                    value={detailMsg?.timing_debug?.range_frame_count?.toString() ?? null}
                   />
                 </DetailSection>
 
-                {msg.region_debug?.candidates?.length ? (
+                {detailMsg?.region_debug?.candidates?.length ? (
                   <DetailSection title="区域候选">
-                    {msg.region_debug.candidates.map((c, i) => (
+                    {detailMsg.region_debug.candidates.map((c, i) => (
                       <div
                         key={c.name || i}
                         className={cn(
@@ -215,11 +219,11 @@ export function LaserStatusCard({
                   </DetailSection>
                 ) : null}
 
-                {msg.corner_pose ? (
+                {detailMsg?.corner_pose ? (
                   <DetailSection title="角点位姿">
                     <DetailRow
                       label="corner_local"
-                      value={`x=${msg.corner_pose.x?.toFixed(3)} y=${msg.corner_pose.y?.toFixed(3)} yaw=${msg.corner_pose.yaw_deg?.toFixed(1)} deg`}
+                      value={`x=${detailMsg.corner_pose.x?.toFixed(3)} y=${detailMsg.corner_pose.y?.toFixed(3)} yaw=${detailMsg.corner_pose.yaw_deg?.toFixed(1)} deg`}
                     />
                   </DetailSection>
                 ) : null}

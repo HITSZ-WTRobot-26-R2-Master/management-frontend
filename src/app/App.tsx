@@ -70,7 +70,9 @@ import { SinglePoseCard } from "@/components/management/SinglePoseCard"
 import type { SinglePoseStreamState } from "@/components/management/SinglePoseCard"
 import { LaserStatusCard } from "@/components/management/LaserStatusCard"
 import { VisionHandinPage } from "@/features/vision-handin/VisionHandinPage"
+import { ArmControlPanel } from "@/features/arm-console/ArmControlPanel"
 import { useDashboardStream } from "@/hooks/useDashboardStream"
+import { useLaserDetailStream } from "@/hooks/useLaserDetailStream"
 import {
   type CommandDiscoveryState,
   type CommandSubmissionState,
@@ -406,6 +408,10 @@ function ManagementApp() {
                 <ConnectionSettings onRefresh={refreshManagementData} />
               }
             />
+            <Route
+              path="/arm"
+              element={<ArmControlPanel />}
+            />
             <Route path="*" element={<Navigate replace to="/overview" />} />
           </Routes>
         </div>
@@ -711,7 +717,8 @@ function OverviewTab({
   const abnormalServices = services.filter(
     (service) => service.overall.level !== "ok",
   )
-  const [laserDetailOpen, setLaserDetailOpen] = useState(false)
+  const [laserDialogOpen, setLaserDialogOpen] = useState(false)
+  const laserDetailStream = useLaserDetailStream({ enabled: laserDialogOpen })
 
   return (
     <section className="flex h-full min-h-0 flex-col gap-3 overflow-hidden">
@@ -740,16 +747,8 @@ function OverviewTab({
             stream={laserPoseStream as SinglePoseStreamState}
             title="Laser 位姿"
             subtitle="/laser_pose"
-            onDetailToggle={() => setLaserDetailOpen(!laserDetailOpen)}
-            detailExpanded={laserDetailOpen}
-            detailContent={
-              <LaserStatusCard
-                snapshot={laserStatusStream.snapshot}
-                error={laserStatusStream.error}
-                status={laserStatusStream.status}
-                onRefresh={laserStatusStream.refresh}
-              />
-            }
+            nanPoseMessage="解算误差过大，位姿无效"
+            onClick={() => setLaserDialogOpen(true)}
           />
           <SinglePoseCard
             stream={masterControlPoseStream as SinglePoseStreamState}
@@ -764,6 +763,21 @@ function OverviewTab({
           onOpenEvents={onOpenEvents}
         />
       </div>
+
+      <Dialog open={laserDialogOpen} onOpenChange={setLaserDialogOpen}>
+        <DialogContent className="max-h-[85vh] max-w-2xl overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Laser 定位详情</DialogTitle>
+          </DialogHeader>
+          <LaserStatusCard
+            snapshot={laserStatusStream.snapshot}
+            error={laserStatusStream.error}
+            status={laserStatusStream.status}
+            onRefresh={laserStatusStream.refresh}
+            detailMessage={laserDetailStream.snapshot?.message ?? null}
+          />
+        </DialogContent>
+      </Dialog>
     </section>
   )
 }

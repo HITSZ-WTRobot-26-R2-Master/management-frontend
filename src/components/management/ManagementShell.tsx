@@ -3,6 +3,7 @@ import {
   Boxes,
   Crosshair,
   Gauge,
+  Hand,
   RefreshCw,
   ServerCog,
   Settings,
@@ -17,6 +18,7 @@ export type ManagementTab =
   | "details"
   | "events"
   | "settings"
+  | "arm"
 
 const navItems: Array<{
   id: ManagementTab
@@ -27,6 +29,7 @@ const navItems: Array<{
   { id: "overview", label: "总览", icon: Gauge, to: "/overview" },
   { id: "services", label: "服务", icon: Boxes, to: "/services" },
   { id: "details", label: "详情", icon: ServerCog, to: "/services" },
+  { id: "arm", label: "机械臂", icon: Hand, to: "/arm" },
   { id: "events", label: "事件", icon: Bell, to: "/events" },
   { id: "settings", label: "设置", icon: Settings, to: "/settings" },
 ]
