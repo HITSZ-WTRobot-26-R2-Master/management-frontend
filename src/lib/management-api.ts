@@ -1,5 +1,6 @@
 import type {
   ApiError,
+  ArmFeedbackSnapshot,
   ChassisStateSnapshot,
   CommandDefinition,
   CommandRequest,
@@ -194,6 +195,12 @@ export class ManagementApiClient {
 
   getChassisState(signal?: AbortSignal) {
     return this.request("/api/chassis/state", isChassisStateSnapshot, {
+      signal,
+    })
+  }
+
+  getArmFeedback(signal?: AbortSignal) {
+    return this.request("/api/arm/feedback", isArmFeedbackSnapshot, {
       signal,
     })
   }
@@ -764,6 +771,18 @@ export function isChassisStateSnapshot(
     isString(value.topic) &&
     isNullableString(value.received_at) &&
     (value.message === null || isChassisStateMessage(value.message))
+  )
+}
+
+function isArmFeedbackSnapshot(
+  value: unknown,
+): value is ArmFeedbackSnapshot {
+  return (
+    isRecord(value) &&
+    isBoolean(value.available) &&
+    isString(value.topic) &&
+    isNullableString(value.received_at) &&
+    (value.completed_cmd === null || isNumber(value.completed_cmd))
   )
 }
 

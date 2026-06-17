@@ -7,7 +7,7 @@ import {
   Send,
   XCircle,
 } from "lucide-react"
-import { useCallback, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import {
   Dialog,
   DialogContent,
@@ -21,7 +21,7 @@ import { cn } from "@/lib/utils"
 import { hasManagementAuthToken } from "@/lib/management-api"
 import { useCommandDiscovery } from "@/hooks/useCommandDiscovery"
 import { authTokenAtom, managementApiClientAtom } from "@/state/operator-shell"
-import type { CommandDefinition, CommandResponse } from "@/types/management"
+import type { CommandDefinition, CommandResponse, ArmFeedbackSnapshot } from "@/types/management"
 import {
   ARM_COMMAND_GROUPS,
   ARM_COMMAND_PARAMS,
@@ -57,6 +57,24 @@ export function ArmControlPanel() {
   const [submissions, setSubmissions] = useState<
     Record<string, SubmissionState>
   >({})
+
+  const [armFeedback, setArmFeedback] = useState<ArmFeedbackSnapshot | null>(null)
+
+  useEffect(() => {
+    if (!client) return
+    let active = true
+    const poll = async () => {
+      try {
+        const fb = await client.getArmFeedback()
+        if (active) setArmFeedback(fb)
+      } catch {
+        /* polling silently fails */
+      }
+    }
+    poll()
+    const interval = setInterval(poll, 1000)
+    return () => { active = false; clearInterval(interval) }
+  }, [client])
 
   const getParams = useCallback(
     (cmdName: string): Record<string, number> => {
@@ -202,6 +220,29 @@ export function ArmControlPanel() {
           </div>
         </div>
       </div>
+
+      {armFeedback && (
+        <div className="mx-4 mt-4 rounded-lg border border-border bg-card p-3">
+          <div className="flex items-center gap-2">
+            <CheckCircle2
+              className={cn(
+                "size-4",
+                armFeedback.available ? "text-emerald-500" : "text-muted-foreground",
+              )}
+            />
+            <span className="text-xs text-muted-foreground">机械臂动作反馈</span>
+          </div>
+          {armFeedback.available ? (
+            <p className="mt-1 text-xs text-card-foreground">
+              最后完成: 0x{armFeedback.completed_cmd?.toString(16).toUpperCase().padStart(2, "0")}
+              {armFeedback.received_at &&
+                ` (${new Date(armFeedback.received_at).toLocaleTimeString()})`}
+            </p>
+          ) : (
+            <p className="mt-1 text-xs text-muted-foreground">尚未收到动作完成反馈</p>
+          )}
+        </div>
+      )}
 
       <div className="flex-1 space-y-4 p-4">
         {ARM_COMMAND_GROUPS.map((group) => {

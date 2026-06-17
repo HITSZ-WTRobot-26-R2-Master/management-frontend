@@ -327,6 +327,13 @@ export interface LaserStatusSnapshot {
   message: LaserStatusMessage | null
 }
 
+export interface ArmFeedbackSnapshot {
+  available: boolean
+  topic: string
+  received_at: string | null
+  completed_cmd: number | null
+}
+
 export interface LaserStatusMessage {
   localized: boolean
   state: string
