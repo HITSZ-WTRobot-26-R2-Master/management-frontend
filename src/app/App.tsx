@@ -71,6 +71,7 @@ import type { SinglePoseStreamState } from "@/components/management/SinglePoseCa
 import { LaserStatusCard } from "@/components/management/LaserStatusCard"
 import { VisionHandinPage } from "@/features/vision-handin/VisionHandinPage"
 import { ArmControlPanel } from "@/features/arm-console/ArmControlPanel"
+import { R2ControllerPage } from "@/features/r2-controller/R2ControllerPage"
 import { useDashboardStream } from "@/hooks/useDashboardStream"
 import { useLaserDetailStream } from "@/hooks/useLaserDetailStream"
 import {
@@ -260,6 +261,7 @@ export function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/vision" element={<VisionHandinPage />} />
+        <Route path="/controller" element={<R2ControllerPage />} />
         <Route path="/*" element={<ManagementApp />} />
       </Routes>
     </BrowserRouter>

@@ -2,6 +2,7 @@ import {
   Bell,
   Boxes,
   Crosshair,
+  Gamepad2,
   Gauge,
   Hand,
   RefreshCw,
@@ -74,6 +75,13 @@ export function ManagementShell({
               >
                 <Crosshair aria-hidden="true" className="size-4" />
                 R2 Vision
+              </NavLink>
+              <NavLink
+                to="/controller"
+                className="inline-flex h-8 items-center gap-2 rounded-md border border-border bg-card px-2.5 text-sm font-semibold text-card-foreground hover:bg-muted"
+              >
+                <Gamepad2 aria-hidden="true" className="size-4" />
+                底盘控制
               </NavLink>
               <button
                 type="button"
