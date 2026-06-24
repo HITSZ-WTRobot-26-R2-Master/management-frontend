@@ -101,6 +101,7 @@ interface DashboardStreamInternalState {
   laserPose: PoseSourceSnapshot<MasterControlPoseMessage> | null
   laserStatus: LaserStatusSnapshot | null
   loadedRecentAt: string | null
+  mapPose: PoseSourceSnapshot<MasterControlPoseMessage> | null
   masterControlPose: PoseSourceSnapshot<MasterControlPoseMessage> | null
   odinBasePose: PoseSourceSnapshot<MasterControlPoseMessage> | null
   odinOdometry: PoseSourceSnapshot<OdinOdometryPoseMessage> | null
@@ -115,6 +116,7 @@ export interface DashboardStreamState {
   laserStatusStream: LaserStatusStreamState
   lastSnapshotAt: string | null
   loadedRecentAt: string | null
+  mapPoseStream: LaserPoseStreamState
   masterControlPoseStream: MasterControlPoseStreamState
   odinBasePoseStream: OdinBasePoseStreamState
   odinOdometryStream: OdinOdometryStreamState
@@ -137,6 +139,7 @@ export function useDashboardStream(): DashboardStreamState {
     error: -1,
     laser: -1,
     laserPose: -1,
+    mapPose: -1,
     odin: -1,
     odinBase: -1,
     pose: -1,
@@ -153,6 +156,7 @@ export function useDashboardStream(): DashboardStreamState {
     laserStatus: null,
     lastSnapshotAt: null,
     loadedRecentAt: null,
+    mapPose: null,
     masterControlPose: null,
     odinBasePose: null,
     odinOdometry: null,
@@ -229,6 +233,7 @@ export function useDashboardStream(): DashboardStreamState {
         laserPose: null,
         laserStatus: null,
         lastSnapshotAt: null,
+        mapPose: null,
         masterControlPose: null,
         odinBasePose: null,
         odinOdometry: null,
@@ -271,6 +276,7 @@ export function useDashboardStream(): DashboardStreamState {
         error: latestSeqRef.current.error,
         laser: message.seq,
         laserPose: message.seq,
+        mapPose: message.seq,
         odin: message.seq,
         odinBase: message.seq,
         pose: message.seq,
@@ -295,6 +301,7 @@ export function useDashboardStream(): DashboardStreamState {
         laserPose: message.snapshot.laser_pose,
         laserStatus: message.snapshot.laser_status,
         lastSnapshotAt: message.time,
+        mapPose: message.snapshot.map_pose,
         masterControlPose: message.snapshot.master_control_pose
           ? {
               available: message.snapshot.master_control_pose.available,
@@ -465,6 +472,24 @@ export function useDashboardStream(): DashboardStreamState {
           error: null,
           lastSnapshotAt: message.time,
           laserPose: message.laser_pose,
+          status: options.status,
+        }))
+        return true
+      }
+
+      if (message.type === "dashboard_map_pose") {
+        if (message.seq <= latestSeqRef.current.mapPose) {
+          return true
+        }
+        latestSeqRef.current = {
+          ...latestSeqRef.current,
+          mapPose: message.seq,
+        }
+        setState((current) => ({
+          ...current,
+          error: null,
+          lastSnapshotAt: message.time,
+          mapPose: message.map_pose,
           status: options.status,
         }))
         return true
@@ -842,6 +867,22 @@ export function useDashboardStream(): DashboardStreamState {
       state.status,
     ],
   )
+  const mapPoseStream = useMemo<LaserPoseStreamState>(
+    () => ({
+      error: state.error,
+      lastMessageAt: state.lastSnapshotAt,
+      refresh: refreshDashboard,
+      snapshot: state.mapPose,
+      status: state.status,
+    }),
+    [
+      refreshDashboard,
+      state.error,
+      state.lastSnapshotAt,
+      state.mapPose,
+      state.status,
+    ],
+  )
   const laserStatusStream = useMemo<LaserStatusStreamState>(
     () => ({
       error: state.error,
@@ -867,6 +908,7 @@ export function useDashboardStream(): DashboardStreamState {
     laserStatusStream,
     lastSnapshotAt: state.lastSnapshotAt,
     loadedRecentAt: state.loadedRecentAt,
+    mapPoseStream,
     masterControlPoseStream,
     odinBasePoseStream,
     odinOdometryStream,
@@ -895,6 +937,7 @@ function initialDashboardSeqState() {
     error: -1,
     laser: -1,
     laserPose: -1,
+    mapPose: -1,
     odin: -1,
     odinBase: -1,
     pose: -1,

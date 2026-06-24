@@ -213,6 +213,14 @@ export class ManagementApiClient {
     )
   }
 
+  getMapPose(signal?: AbortSignal) {
+    return this.request(
+      "/api/pose/map",
+      isMasterControlPoseSnapshot,
+      { signal },
+    )
+  }
+
   getDashboard(signal?: AbortSignal) {
     return this.request("/api/dashboard", isDashboardWebSocketMessage, {
       signal,
@@ -979,6 +987,8 @@ export function parseDashboardStreamMessage(
       return parseDashboardOdinBaseFrame(value, seq, time)
     case "g":
       return parseDashboardLaserPoseFrame(value, seq, time)
+    case "m":
+      return parseDashboardMapPoseFrame(value, seq, time)
     case "s":
       return parseDashboardServicesFrame(value, seq, time)
     case "l":
@@ -1008,6 +1018,27 @@ function parseDashboardChassisFrame(
     seq,
     time,
     chassis_state: chassisState,
+  }
+}
+
+function parseDashboardMapPoseFrame(
+  value: unknown[],
+  seq: number,
+  time: string,
+): DashboardCompactWebSocketMessage | null {
+  const map_pose = value[3] == null || (Array.isArray(value[3]) && value[3].length === 0)
+    ? null
+    : parsePoseSourceSnapshot(value[3], parseMasterControlPoseMessage)
+
+  if (map_pose === undefined) {
+    return null
+  }
+
+  return {
+    type: "dashboard_map_pose",
+    seq,
+    time,
+    map_pose: map_pose as PoseSourceSnapshot<MasterControlPoseMessage> | null,
   }
 }
 

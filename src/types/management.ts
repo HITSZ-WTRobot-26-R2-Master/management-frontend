@@ -496,6 +496,7 @@ export interface DashboardSnapshot {
   odin_base_pose: PoseSourceSnapshot<MasterControlPoseMessage> | null
   laser_pose: PoseSourceSnapshot<MasterControlPoseMessage> | null
   laser_status: LaserStatusSnapshot | null
+  map_pose: PoseSourceSnapshot<MasterControlPoseMessage> | null
 }
 
 export type BlockStateValue = 0 | 1 | 2 | 3 | 4
@@ -584,6 +585,13 @@ export interface DashboardLaserPoseFrameMessage {
   laser_pose: PoseSourceSnapshot<MasterControlPoseMessage> | null
 }
 
+export interface DashboardMapPoseFrameMessage {
+  type: "dashboard_map_pose"
+  seq: number
+  time: string
+  map_pose: PoseSourceSnapshot<MasterControlPoseMessage> | null
+}
+
 export interface LaserDetailSnapshotMessage {
   type: "laser_detail_snapshot"
   time: string
@@ -609,6 +617,7 @@ export type DashboardCompactWebSocketMessage =
   | DashboardOdinFrameMessage
   | DashboardOdinBaseFrameMessage
   | DashboardLaserPoseFrameMessage
+  | DashboardMapPoseFrameMessage
   | DashboardErrorMessage
 
 export type DashboardStreamMessage =

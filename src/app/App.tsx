@@ -282,6 +282,7 @@ function ManagementApp() {
   const odinOdometryStream = dashboardStream.odinOdometryStream
   const odinBasePoseStream = dashboardStream.odinBasePoseStream
   const laserPoseStream = dashboardStream.laserPoseStream
+  const mapPoseStream = dashboardStream.mapPoseStream
   const laserStatusStream = dashboardStream.laserStatusStream
   const refreshSnapshot = snapshot.refresh
   const refreshCommands = commandDiscovery.refresh
@@ -359,6 +360,7 @@ function ManagementApp() {
                   laserPoseStream={laserPoseStream}
                   laserStatusStream={laserStatusStream}
                   lastLoadedAt={snapshot.lastLoadedAt}
+                  mapPoseStream={mapPoseStream}
                   masterControlPoseStream={masterControlPoseStream}
                   odinBasePoseStream={odinBasePoseStream}
                   odinOdometryStream={odinOdometryStream}
@@ -697,6 +699,7 @@ function OverviewTab({
   laserPoseStream,
   laserStatusStream,
   lastLoadedAt,
+  mapPoseStream,
   masterControlPoseStream,
   odinBasePoseStream,
   odinOdometryStream,
@@ -709,6 +712,7 @@ function OverviewTab({
   laserPoseStream: ReturnType<typeof useDashboardStream>["laserPoseStream"]
   laserStatusStream: ReturnType<typeof useDashboardStream>["laserStatusStream"]
   lastLoadedAt: string | null
+  mapPoseStream: SinglePoseStreamState
   masterControlPoseStream: ReturnType<typeof useDashboardStream>["masterControlPoseStream"]
   odinBasePoseStream: ReturnType<typeof useDashboardStream>["odinBasePoseStream"]
   odinOdometryStream: ReturnType<typeof useDashboardStream>["odinOdometryStream"]
@@ -743,19 +747,19 @@ function OverviewTab({
           <SinglePoseCard
             stream={odinBasePoseStream as SinglePoseStreamState}
             title="Odin 变换位姿"
-            subtitle="/odin_base_pose"
+            subtitle="/pose/lidar"
           />
           <SinglePoseCard
             stream={laserPoseStream as SinglePoseStreamState}
             title="Laser 位姿"
-            subtitle="/laser_pose"
+            subtitle="/pose/laser"
             nanPoseMessage="解算误差过大，位姿无效"
             onClick={() => setLaserDialogOpen(true)}
           />
           <SinglePoseCard
-            stream={masterControlPoseStream as SinglePoseStreamState}
-            title="主控输出"
-            subtitle="/to_master_control"
+            stream={mapPoseStream as SinglePoseStreamState}
+            title="World→Ideal 变换"
+            subtitle="/pose/map"
           />
         </div>
       </div>
