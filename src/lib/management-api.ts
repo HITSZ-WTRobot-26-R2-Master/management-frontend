@@ -1026,19 +1026,13 @@ function parseDashboardMapPoseFrame(
   seq: number,
   time: string,
 ): DashboardCompactWebSocketMessage | null {
-  const map_pose = value[3] == null || (Array.isArray(value[3]) && value[3].length === 0)
-    ? null
-    : parsePoseSourceSnapshot(value[3], parseMasterControlPoseMessage)
-
-  if (map_pose === undefined) {
-    return null
-  }
+  const map_pose = parseCompactSinglePose(value[3])
 
   return {
     type: "dashboard_map_pose",
     seq,
     time,
-    map_pose: map_pose as PoseSourceSnapshot<MasterControlPoseMessage> | null,
+    map_pose,
   }
 }
 
