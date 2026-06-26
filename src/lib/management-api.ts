@@ -1495,12 +1495,12 @@ function parseCompactMasterControlPoseMessageNanTolerant(
     !isNumber(stampNanosec) ||
     !isString(frameId) ||
     !isString(source) ||
-    typeof x !== "number" ||
-    typeof y !== "number" ||
-    typeof z !== "number" ||
-    typeof rollDeg !== "number" ||
-    typeof pitchDeg !== "number" ||
-    typeof yawDeg !== "number"
+    (typeof x !== "number" && x !== null) ||
+    (typeof y !== "number" && y !== null) ||
+    (typeof z !== "number" && z !== null) ||
+    (typeof rollDeg !== "number" && rollDeg !== null) ||
+    (typeof pitchDeg !== "number" && pitchDeg !== null) ||
+    (typeof yawDeg !== "number" && yawDeg !== null)
   ) {
     return null
   }
@@ -1514,12 +1514,12 @@ function parseCompactMasterControlPoseMessageNanTolerant(
       frame_id: frameId,
     },
     source,
-    x,
-    y,
-    z,
-    roll_deg: rollDeg,
-    pitch_deg: pitchDeg,
-    yaw_deg: yawDeg,
+    x: typeof x === "number" ? x : NaN,
+    y: typeof y === "number" ? y : NaN,
+    z: typeof z === "number" ? z : NaN,
+    roll_deg: typeof rollDeg === "number" ? rollDeg : NaN,
+    pitch_deg: typeof pitchDeg === "number" ? pitchDeg : NaN,
+    yaw_deg: typeof yawDeg === "number" ? yawDeg : NaN,
   }
 }
 

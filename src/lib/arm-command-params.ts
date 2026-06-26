@@ -15,6 +15,21 @@ export const ARM_COMMAND_PARAMS: Record<string, ArmCommandParamDef> = {
     defaults: { x: 0.3, y: 0.3 },
     description: "吸住卷轴后抬升。x/y 需与 prepare 一致",
   },
+  arm_take_front: {
+    fields: ["x", "y"],
+    defaults: { x: 0.3, y: 0.3 },
+    description: "从前方取卷轴（完整动作：接近+吸取+缩回）。x/y=卷轴坐标(m)",
+  },
+  arm_take_front_prepare: {
+    fields: ["x", "y"],
+    defaults: { x: 0.3, y: 0.3 },
+    description: "从前方接近卷轴，开启吸盘。x/y 需与 do 一致",
+  },
+  arm_take_front_do: {
+    fields: ["x", "y"],
+    defaults: { x: 0.3, y: 0.3 },
+    description: "吸住卷轴后缩回。x/y 需与 prepare 一致",
+  },
   arm_place_direct: {
     fields: ["x", "y"],
     defaults: { x: 0.3, y: 0.3 },
@@ -45,6 +60,16 @@ export const ARM_COMMAND_PARAMS: Record<string, ArmCommandParamDef> = {
     defaults: {},
     description: "返回空闲位置，保持吸住卷轴",
   },
+  arm_throw: {
+    fields: [],
+    defaults: {},
+    description: "举到头顶扔掉卷轴。无需参数，自动执行预设路径",
+  },
+  arm_back_to_start: {
+    fields: ["q1", "q2", "q3"],
+    defaults: { q1: 90, q2: 35, q3: 55 },
+    description: "返回指定关节角位置。q1/q2/q3=目标关节角(度)",
+  },
 }
 
 export const ARM_COMMAND_GROUPS: Array<{
@@ -54,6 +79,10 @@ export const ARM_COMMAND_GROUPS: Array<{
   {
     label: "取卷轴 (Top Take)",
     commands: ["arm_take_top_prepare", "arm_take_top_do"],
+  },
+  {
+    label: "取卷轴 (Front Take)",
+    commands: ["arm_take_front", "arm_take_front_prepare", "arm_take_front_do"],
   },
   {
     label: "放置卷轴 (Place)",
@@ -70,5 +99,13 @@ export const ARM_COMMAND_GROUPS: Array<{
   {
     label: "空闲 (Idle)",
     commands: ["arm_back_to_idle", "arm_back_to_idle_suck"],
+  },
+  {
+    label: "扔卷轴 (Throw)",
+    commands: ["arm_throw"],
+  },
+  {
+    label: "回归起点 (Back to Start)",
+    commands: ["arm_back_to_start"],
   },
 ]
