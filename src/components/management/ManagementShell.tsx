@@ -8,6 +8,7 @@ import {
   RefreshCw,
   ServerCog,
   Settings,
+  Workflow,
 } from "lucide-react"
 import type { ReactNode } from "react"
 import { NavLink } from "react-router-dom"
@@ -20,6 +21,7 @@ export type ManagementTab =
   | "events"
   | "settings"
   | "arm"
+  | "process-control"
 
 const navItems: Array<{
   id: ManagementTab
@@ -31,6 +33,7 @@ const navItems: Array<{
   { id: "services", label: "服务", icon: Boxes, to: "/services" },
   { id: "details", label: "详情", icon: ServerCog, to: "/services" },
   { id: "arm", label: "机械臂", icon: Hand, to: "/arm" },
+  { id: "process-control", label: "流程控制", icon: Workflow, to: "/process-control" },
   { id: "events", label: "事件", icon: Bell, to: "/events" },
   { id: "settings", label: "设置", icon: Settings, to: "/settings" },
 ]

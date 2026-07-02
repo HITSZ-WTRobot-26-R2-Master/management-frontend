@@ -71,6 +71,7 @@ import type { SinglePoseStreamState } from "@/components/management/SinglePoseCa
 import { LaserStatusCard } from "@/components/management/LaserStatusCard"
 import { VisionHandinPage } from "@/features/vision-handin/VisionHandinPage"
 import { ArmControlPanel } from "@/features/arm-console/ArmControlPanel"
+import { ProcessControlPanel } from "@/features/process-control/ProcessControlPanel"
 import { R2ControllerPage } from "@/features/r2-controller/R2ControllerPage"
 import { useDashboardStream } from "@/hooks/useDashboardStream"
 import { useLaserDetailStream } from "@/hooks/useLaserDetailStream"
@@ -415,6 +416,10 @@ function ManagementApp() {
             <Route
               path="/arm"
               element={<ArmControlPanel />}
+            />
+            <Route
+              path="/process-control"
+              element={<ProcessControlPanel />}
             />
             <Route path="*" element={<Navigate replace to="/overview" />} />
           </Routes>
