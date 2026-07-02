@@ -159,9 +159,9 @@ export function ProcessControlPanel() {
                 master_full 尚未适配流程监控，此区域保留用于未来流程状态展示。
               </p>
               <ul className="mt-2 list-inside list-disc space-y-0.5 text-xs text-amber-600">
-                <li>TODO: 任务阶段/状态展示（待机 / 梅林 / 对抗 / 完成）</li>
+                <li>触发 topic：master_switch (UInt8) — 全局启动，已实现</li>
+                <li>TODO: 状态 topic（独立 topic）— 获取当前流程阶段（待机 / 梅林 / 对抗 / 完成）</li>
                 <li>TODO: 动作执行进度追踪</li>
-                <li>TODO: 输入话题数据状态</li>
               </ul>
             </div>
           </div>
