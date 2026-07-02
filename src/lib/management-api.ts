@@ -547,6 +547,13 @@ export function parseApiError(
     return payload
   }
 
+  if (isCommandResponse(payload)) {
+    return {
+      code: payload.result,
+      message: payload.message || `命令执行失败: ${payload.result}`,
+    }
+  }
+
   if (status === 401) {
     return AUTH_REQUIRED_ERROR
   }
