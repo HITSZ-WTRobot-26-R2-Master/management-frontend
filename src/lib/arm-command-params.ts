@@ -70,6 +70,16 @@ export const ARM_COMMAND_PARAMS: Record<string, ArmCommandParamDef> = {
     defaults: { q1: 90, q2: 35, q3: 55 },
     description: "返回指定关节角位置。q1/q2/q3=目标关节角(度)",
   },
+  arm_release: {
+    fields: [],
+    defaults: {},
+    description: "放开当前吸住的卷轴。关闭吸盘并等待气压恢复，无需参数",
+  },
+  arm_get_KFS_from_R1: {
+    fields: ["x", "y"],
+    defaults: { x: -0.3, y: 0.15 },
+    description: "从车后获取R1卷轴。x=卷轴X坐标(m, 必须<0), y=卷轴Y坐标(m)",
+  },
 }
 
 export const ARM_COMMAND_GROUPS: Array<{
@@ -107,5 +117,13 @@ export const ARM_COMMAND_GROUPS: Array<{
   {
     label: "回归起点 (Back to Start)",
     commands: ["arm_back_to_start"],
+  },
+  {
+    label: "放开卷轴 (Release)",
+    commands: ["arm_release"],
+  },
+  {
+    label: "取卷轴 (R1 Take)",
+    commands: ["arm_get_KFS_from_R1"],
   },
 ]
