@@ -17,9 +17,9 @@ import {
   formatChassisMode,
   formatChassisStepStatus,
   formatGripStatus,
-  formatGripSuctionHasObject,
-  formatInfraredReceiverState,
+  formatInfraredSwitchState,
   formatLiftStatus,
+  formatTrajectoryOfflineState,
   getChassisActionStateDisplayFields,
 } from "@/lib/chassis-action-state-display"
 import {
@@ -181,15 +181,15 @@ export function ChassisStateCard({
                   )}
                 />
                 <CompactField
-                  label="吸附检测"
-                  value={formatGripSuctionHasObject(
-                    message.action.grip_suction_has_object,
+                  label="离线轨迹"
+                  value={formatTrajectoryOfflineState(
+                    message.action.trajectory_offline_state,
                   )}
                 />
                 <CompactField
-                  label="红外状态"
-                  value={formatInfraredReceiverState(
-                    message.action.infrared_receiver_state,
+                  label="红外开关"
+                  value={formatInfraredSwitchState(
+                    message.action.infrared_switch_state,
                   )}
                 />
                 <CompactField

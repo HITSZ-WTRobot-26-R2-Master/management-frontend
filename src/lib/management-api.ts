@@ -870,8 +870,12 @@ function isChassisActionState(value: unknown) {
     isBoolean(value.chassis_curve_finished) &&
     isNumber(value.lift_status) &&
     isNumber(value.grip_status) &&
-    isBoolean(value.grip_suction_has_object) &&
-    isNumber(value.infrared_receiver_state)
+    isNumber(value.trajectory_offline_state) &&
+    isNumber(value.infrared_switch_state) &&
+    isBoolean(value.infrared_switch_0) &&
+    isBoolean(value.infrared_switch_1) &&
+    isBoolean(value.infrared_switch_2) &&
+    isBoolean(value.infrared_switch_3)
   )
 }
 
@@ -1345,12 +1349,11 @@ function parseCompactChassisMessage(
     curveFinishedCode,
     liftStatus,
     gripStatus,
-    gripHasObjectCode,
-    infraredState,
+    trajectoryOfflineState,
+    infraredSwitchState,
     connectionRaw,
   ] = value
   const curveFinished = decodeBooleanCode(curveFinishedCode)
-  const gripHasObject = decodeBooleanCode(gripHasObjectCode)
   if (
     !isNumber(timestampMs) ||
     !isNumber(x) ||
@@ -1364,8 +1367,8 @@ function parseCompactChassisMessage(
     curveFinished === null ||
     !isNumber(liftStatus) ||
     !isNumber(gripStatus) ||
-    gripHasObject === null ||
-    !isNumber(infraredState) ||
+    !isNumber(trajectoryOfflineState) ||
+    !isNumber(infraredSwitchState) ||
     !isNumber(connectionRaw)
   ) {
     return undefined
@@ -1387,8 +1390,12 @@ function parseCompactChassisMessage(
       chassis_curve_finished: curveFinished,
       lift_status: liftStatus,
       grip_status: gripStatus,
-      grip_suction_has_object: gripHasObject,
-      infrared_receiver_state: infraredState,
+      trajectory_offline_state: trajectoryOfflineState,
+      infrared_switch_state: infraredSwitchState,
+      infrared_switch_0: Boolean(infraredSwitchState & 0x01),
+      infrared_switch_1: Boolean(infraredSwitchState & 0x02),
+      infrared_switch_2: Boolean(infraredSwitchState & 0x04),
+      infrared_switch_3: Boolean(infraredSwitchState & 0x08),
     },
     connection: decodeChassisConnection(connectionRaw),
   }

@@ -15,8 +15,12 @@ export interface ChassisStateAction {
   chassis_curve_finished: boolean
   lift_status: number
   grip_status: number
-  grip_suction_has_object: boolean
-  infrared_receiver_state: number
+  trajectory_offline_state: number
+  infrared_switch_state: number
+  infrared_switch_0: boolean
+  infrared_switch_1: boolean
+  infrared_switch_2: boolean
+  infrared_switch_3: boolean
 }
 
 export interface ChassisStateConnection {

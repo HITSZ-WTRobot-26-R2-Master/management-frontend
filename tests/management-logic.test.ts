@@ -4,9 +4,9 @@ import {
   formatChassisMode,
   formatChassisStepStatus,
   formatGripStatus,
-  formatGripSuctionHasObject,
-  formatInfraredReceiverState,
+  formatInfraredSwitchState,
   formatLiftStatus,
+  formatTrajectoryOfflineState,
   getChassisActionStateDisplayFields,
 } from "../src/lib/chassis-action-state-display"
 import { getCommandConfirmationState } from "../src/lib/command-confirmation"
@@ -186,12 +186,12 @@ describe("management API errors", () => {
         return new Response(
           JSON.stringify([
             {
-              id: "field_origin",
-              label: "场地原点",
-              pose_x: 0,
-              pose_y: 0,
+              id: "red_zone_1",
+              label: "红场一区起点",
+              pose_x: 0.5,
+              pose_y: -1.4,
               pose_z: 0,
-              pose_yaw_deg: 0,
+              pose_yaw_deg: -90,
             },
           ]),
           {
@@ -206,12 +206,12 @@ describe("management API errors", () => {
 
     await expect(client.listResetOriginPresets()).resolves.toEqual([
       {
-        id: "field_origin",
-        label: "场地原点",
-        pose_x: 0,
-        pose_y: 0,
+        id: "red_zone_1",
+        label: "红场一区起点",
+        pose_x: 0.5,
+        pose_y: -1.4,
         pose_z: 0,
-        pose_yaw_deg: 0,
+        pose_yaw_deg: -90,
       },
     ])
   })
@@ -446,12 +446,12 @@ describe("chassis state API contract", () => {
       "Finished",
     )
     expect(formatLiftStatus(action.lift_status)).toBe("NotEnabled")
-    expect(formatGripStatus(action.grip_status)).toBe("Idle")
-    expect(formatGripSuctionHasObject(action.grip_suction_has_object)).toBe(
-      "NoObject",
+    expect(formatGripStatus(action.grip_status)).toBe("Done")
+    expect(formatTrajectoryOfflineState(action.trajectory_offline_state)).toBe(
+      "Finished",
     )
-    expect(formatInfraredReceiverState(action.infrared_receiver_state)).toBe(
-      "A2",
+    expect(formatInfraredSwitchState(action.infrared_switch_state)).toBe(
+      "0b1010 switch[1,3]",
     )
     expect(getChassisActionStateDisplayFields(action)).toEqual([
       ["raw_table", "0x1234"],
@@ -459,9 +459,9 @@ describe("chassis state API contract", () => {
       ["chassis_mode", "Position"],
       ["chassis_curve_finished", "Finished"],
       ["lift_status", "NotEnabled"],
-      ["grip_status", "Idle"],
-      ["grip_suction_has_object", "NoObject"],
-      ["infrared_receiver_state", "A2"],
+      ["grip_status", "Done"],
+      ["trajectory_offline_state", "Finished"],
+      ["infrared_switch_state", "0b1010 switch[1,3]"],
     ])
   })
 
@@ -469,10 +469,10 @@ describe("chassis state API contract", () => {
     expect(formatChassisStepStatus(4)).toBe("Unknown(4)")
     expect(formatChassisMode(7)).toBe("Unknown(7)")
     expect(formatLiftStatus(Number.NaN)).toBe("Unknown(NaN)")
-    expect(formatGripStatus(6)).toBe("Unknown(6)")
-    expect(formatInfraredReceiverState(-1)).toBe("Unknown(-1)")
+    expect(formatGripStatus(7)).toBe("Unknown(7)")
+    expect(formatTrajectoryOfflineState(-1)).toBe("Unknown(-1)")
+    expect(formatInfraredSwitchState(0)).toBe("0b0000 None")
     expect(formatChassisCurveFinished(false)).toBe("Unfinished")
-    expect(formatGripSuctionHasObject(true)).toBe("HasObject")
   })
 })
 
@@ -593,7 +593,10 @@ describe("master-control pose API contract", () => {
           1,
           "chassis_state",
           timestampMs,
-          [1234, 1.25, -2.5, 90, 0.12, 0.13, 0x1234, 1, 2, 1, 3, 4, 0, 2, 0xc3ff],
+          [
+            1234, 1.25, -2.5, 90, 0.12, 0.13, 0x1234, 1, 2, 1, 3, 5, 2, 10,
+            0xc3ff,
+          ],
         ],
       ]),
     ).toMatchObject({
@@ -607,7 +610,11 @@ describe("master-control pose API contract", () => {
           action: {
             raw_table: 0x1234,
             chassis_curve_finished: true,
-            grip_suction_has_object: false,
+            grip_status: 5,
+            trajectory_offline_state: 2,
+            infrared_switch_state: 10,
+            infrared_switch_1: true,
+            infrared_switch_3: true,
           },
           connection: {
             raw_table: 0xc3ff,
@@ -1439,9 +1446,13 @@ function chassisStateSnapshot() {
         chassis_mode: 2,
         chassis_curve_finished: true,
         lift_status: 3,
-        grip_status: 4,
-        grip_suction_has_object: false,
-        infrared_receiver_state: 2,
+        grip_status: 5,
+        trajectory_offline_state: 2,
+        infrared_switch_state: 10,
+        infrared_switch_0: false,
+        infrared_switch_1: true,
+        infrared_switch_2: false,
+        infrared_switch_3: true,
       },
       connection: {
         raw_table: 0xc3ff,

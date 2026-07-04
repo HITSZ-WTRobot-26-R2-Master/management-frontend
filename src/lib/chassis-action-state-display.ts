@@ -27,15 +27,15 @@ const gripStatusLabels: Record<number, string> = {
   1: "TakingSpear",
   2: "KfsStore",
   3: "KfsRelease",
-  4: "Idle",
   5: "Done",
+  6: "Running",
 }
 
-const infraredReceiverStateLabels: Record<number, string> = {
-  0: "A0",
-  1: "A1",
-  2: "A2",
-  3: "A3",
+const trajectoryOfflineStateLabels: Record<number, string> = {
+  0: "Idle",
+  1: "Running",
+  2: "Finished",
+  3: "Interrupted",
 }
 
 export function formatChassisStepStatus(value: number) {
@@ -58,12 +58,14 @@ export function formatGripStatus(value: number) {
   return formatEnumValue(gripStatusLabels, value)
 }
 
-export function formatGripSuctionHasObject(value: boolean) {
-  return value ? "HasObject" : "NoObject"
+export function formatTrajectoryOfflineState(value: number) {
+  return formatEnumValue(trajectoryOfflineStateLabels, value)
 }
 
-export function formatInfraredReceiverState(value: number) {
-  return formatEnumValue(infraredReceiverStateLabels, value)
+export function formatInfraredSwitchState(value: number) {
+  const active = [0, 1, 2, 3].filter((index) => Boolean(value & (1 << index)))
+  const activeText = active.length > 0 ? `switch[${active.join(",")}]` : "None"
+  return `0b${(value & 0xf).toString(2).padStart(4, "0")} ${activeText}`
 }
 
 export function getChassisActionStateDisplayFields(
@@ -80,12 +82,12 @@ export function getChassisActionStateDisplayFields(
     ["lift_status", formatLiftStatus(action.lift_status)],
     ["grip_status", formatGripStatus(action.grip_status)],
     [
-      "grip_suction_has_object",
-      formatGripSuctionHasObject(action.grip_suction_has_object),
+      "trajectory_offline_state",
+      formatTrajectoryOfflineState(action.trajectory_offline_state),
     ],
     [
-      "infrared_receiver_state",
-      formatInfraredReceiverState(action.infrared_receiver_state),
+      "infrared_switch_state",
+      formatInfraredSwitchState(action.infrared_switch_state),
     ],
   ] satisfies Array<[string, string]>
 }
