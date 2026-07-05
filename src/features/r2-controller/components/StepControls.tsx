@@ -63,7 +63,7 @@ interface StepControlProps {
   config: ControllerConfig | null
 }
 
-export function StepControl({ connected, sendCommand, config }: StepControlProps) {
+export function StepControl({ connected, sendCommand, config: _config }: StepControlProps) {
   const [startDist, setStartDist] = useState(0.5)
   const [endDist, setEndDist] = useState(0.5)
   const [direction, setDirection] = useState(0)

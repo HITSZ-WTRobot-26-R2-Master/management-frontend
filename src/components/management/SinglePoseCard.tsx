@@ -56,7 +56,7 @@ export function SinglePoseCard({
   )
   const msg = stream.snapshot?.message ?? null
   const hasPose = msg !== null
-  const hasNanPose = hasPose && isNaN(msg.x) && isNaN(msg.y) && isNaN(msg.z)
+  const hasNanPose = hasPose && (isNaN(msg.x) || isNaN(msg.y) || isNaN(msg.z))
   const clickable = Boolean(onClick)
   const isOdinMsg = (
     m: PoseMessage,

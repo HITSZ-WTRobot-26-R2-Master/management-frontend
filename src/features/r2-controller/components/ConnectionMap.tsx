@@ -33,7 +33,7 @@ export function ConnectionMap({ state, connected }: ConnectionMapProps) {
       ) : (
         <div className="mt-3 grid grid-cols-2 gap-y-1 gap-x-3 text-sm">
           {DEVICES.map(({ key, label }) => {
-            const online = Boolean((state.connection as Record<string, boolean | number>)[key])
+            const online = Boolean((state.connection as unknown as Record<string, boolean | number>)[key])
             return (
               <div key={key} className="flex items-center justify-between">
                 <span className="text-muted-foreground">{label}</span>

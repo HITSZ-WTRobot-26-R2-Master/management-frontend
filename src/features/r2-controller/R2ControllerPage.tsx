@@ -12,7 +12,6 @@ import { GripControl } from "@/features/r2-controller/components/GripControl"
 import { SystemControl } from "@/features/r2-controller/components/SystemControl"
 import { SerialDebugger } from "@/features/r2-controller/components/SerialDebugger"
 import { useChassisWebSocket } from "@/features/r2-controller/hooks/useChassisWebSocket"
-import type { ChassisStateSnapshot } from "@/features/r2-controller/types/controller"
 
 export function R2ControllerPage() {
   const [searchParams] = useSearchParams()

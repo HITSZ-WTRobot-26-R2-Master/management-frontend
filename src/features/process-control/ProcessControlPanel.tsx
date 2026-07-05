@@ -23,7 +23,7 @@ import { cn } from "@/lib/utils"
 import { hasManagementAuthToken } from "@/lib/management-api"
 import { useCommandDiscovery } from "@/hooks/useCommandDiscovery"
 import { authTokenAtom, managementApiClientAtom } from "@/state/operator-shell"
-import type { CommandDefinition, CommandResponse } from "@/types/management"
+import type { CommandDefinition, CommandResponse, JsonValue } from "@/types/management"
 
 const TARGET_MASTER_FULL = "master_full"
 
@@ -40,7 +40,7 @@ type SubmissionState = {
   error: string | null
 }
 
-type RetryParams = Record<string, unknown>
+type RetryParams = Record<string, JsonValue>
 
 function retryDefaultParams(cmdName: string): RetryParams {
   switch (cmdName) {
@@ -86,7 +86,7 @@ export function ProcessControlPanel() {
   )
 
   const updateRetryParam = useCallback(
-    (cmdName: string, key: string, value: unknown) => {
+    (cmdName: string, key: string, value: JsonValue) => {
       setRetryParams((prev) => ({
         ...prev,
         [cmdName]: { ...prev[cmdName], [key]: value },
@@ -419,7 +419,7 @@ interface RetryCardProps {
   command: CommandDefinition
   params: RetryParams
   submission?: SubmissionState
-  onParamChange: (key: string, value: unknown) => void
+  onParamChange: (key: string, value: JsonValue) => void
   onExecute: (payload: RetryParams) => void
 }
 
@@ -500,7 +500,7 @@ function RetryParamsInput({
 }: {
   cmdName: string
   params: RetryParams
-  onChange: (key: string, value: unknown) => void
+  onChange: (key: string, value: JsonValue) => void
 }) {
   switch (cmdName) {
     case "retry_take_spear":

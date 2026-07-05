@@ -279,7 +279,6 @@ function ManagementApp() {
   const commandDiscovery = useCommandDiscovery()
   const dashboardStream = useDashboardStream()
   const chassisStateStream = dashboardStream.chassisStateStream
-  const masterControlPoseStream = dashboardStream.masterControlPoseStream
   const odinOdometryStream = dashboardStream.odinOdometryStream
   const odinBasePoseStream = dashboardStream.odinBasePoseStream
   const laserPoseStream = dashboardStream.laserPoseStream
@@ -362,7 +361,6 @@ function ManagementApp() {
                   laserStatusStream={laserStatusStream}
                   lastLoadedAt={snapshot.lastLoadedAt}
                   mapPoseStream={mapPoseStream}
-                  masterControlPoseStream={masterControlPoseStream}
                   odinBasePoseStream={odinBasePoseStream}
                   odinOdometryStream={odinOdometryStream}
                   services={services}
@@ -705,7 +703,6 @@ function OverviewTab({
   laserStatusStream,
   lastLoadedAt,
   mapPoseStream,
-  masterControlPoseStream,
   odinBasePoseStream,
   odinOdometryStream,
   services,
@@ -718,7 +715,6 @@ function OverviewTab({
   laserStatusStream: ReturnType<typeof useDashboardStream>["laserStatusStream"]
   lastLoadedAt: string | null
   mapPoseStream: SinglePoseStreamState
-  masterControlPoseStream: ReturnType<typeof useDashboardStream>["masterControlPoseStream"]
   odinBasePoseStream: ReturnType<typeof useDashboardStream>["odinBasePoseStream"]
   odinOdometryStream: ReturnType<typeof useDashboardStream>["odinOdometryStream"]
   services: ServiceStatus[]

@@ -1,7 +1,6 @@
 "use client"
 
-import { useState, useEffect, useRef, useCallback } from "react"
-import type { ChassisWebSocketState } from "@/features/r2-controller/hooks/useChassisWebSocket"
+import { useState, useEffect } from "react"
 
 type TabDef = {
   id: string
