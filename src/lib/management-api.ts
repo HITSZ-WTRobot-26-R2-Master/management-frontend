@@ -434,6 +434,14 @@ export function buildLaserDetailWebSocketUrl(baseUrl: string, token: string) {
   ).toString()
 }
 
+export function buildRetryStateWebSocketUrl(baseUrl: string, token: string) {
+  return buildManagementWebSocketEndpointUrl(
+    baseUrl,
+    "/ws/retry-state",
+    token,
+  ).toString()
+}
+
 export function buildServiceLogWebSocketUrl(
   baseUrl: string,
   token: string,

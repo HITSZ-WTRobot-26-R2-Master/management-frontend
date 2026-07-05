@@ -4,12 +4,13 @@ import {
   CheckCircle2,
   Construction,
   LoaderCircle,
-  Play,
   Send,
+  Wifi,
+  WifiOff,
   Workflow,
   XCircle,
 } from "lucide-react"
-import { useCallback, useState } from "react"
+import { useCallback, useRef, useState } from "react"
 import {
   Dialog,
   DialogContent,
@@ -23,36 +24,35 @@ import { cn } from "@/lib/utils"
 import { hasManagementAuthToken } from "@/lib/management-api"
 import { useCommandDiscovery } from "@/hooks/useCommandDiscovery"
 import { authTokenAtom, managementApiClientAtom } from "@/state/operator-shell"
-import type { CommandDefinition, CommandResponse, JsonValue } from "@/types/management"
+import type { CommandDefinition, CommandResponse, JsonValue, RetryType, RetryStateParams } from "@/types/management"
+import { useRetryState } from "./hooks/useRetryState"
 
 const TARGET_MASTER_FULL = "master_full"
 
 const PC_COMMAND_NAMES = new Set(["global_start", "retry_prepare"])
-const RETRY_COMMAND_NAMES = new Set([
+
+const RETRY_TYPE_LABELS: Record<RetryType, string> = {
+  retry_take_spear: "重取矛头",
+  retry_merlin: "梅林",
+  retry_combat: "对抗",
+}
+
+const RETRY_TYPE_ORDER: RetryType[] = [
   "retry_take_spear",
   "retry_merlin",
   "retry_combat",
-])
+]
+
+const DEFAULT_PARAMS: Record<RetryType, RetryStateParams> = {
+  retry_take_spear: { spear_index: 1, previous_spear_needs_dock: false },
+  retry_merlin: { r2_taken_count: 0, taken_r2_blocks: [] },
+  retry_combat: { combat_source: 1, combat_place_layer: 1 },
+}
 
 type SubmissionState = {
   submitting: boolean
   lastResponse: CommandResponse | null
   error: string | null
-}
-
-type RetryParams = Record<string, JsonValue>
-
-function retryDefaultParams(cmdName: string): RetryParams {
-  switch (cmdName) {
-    case "retry_take_spear":
-      return { spear_index: 1, previous_spear_needs_dock: false }
-    case "retry_merlin":
-      return { r2_taken_count: 0, taken_r2_blocks: [] }
-    case "retry_combat":
-      return { combat_source: 1, combat_place_layer: 1 }
-    default:
-      return {}
-  }
 }
 
 export function ProcessControlPanel() {
@@ -62,41 +62,36 @@ export function ProcessControlPanel() {
 
   const hasToken = hasManagementAuthToken(token)
 
-  const pcCommands = discovery.commands.filter((c) =>
-    PC_COMMAND_NAMES.has(c.name),
-  )
-  const retryCommands = discovery.commands.filter((c) =>
-    RETRY_COMMAND_NAMES.has(c.name),
-  )
+  const {
+    activeRetryType,
+    params,
+    revision,
+    setRetryState,
+    connected,
+    status: retrySyncStatus,
+    error: retrySyncError,
+  } = useRetryState()
 
+  const paramsCache = useRef<Record<RetryType, RetryStateParams>>({
+    ...DEFAULT_PARAMS,
+  })
+
+  // Sidebar state (for global_start / retry_prepare only)
   const [confirmCommand, setConfirmCommand] =
     useState<CommandDefinition | null>(null)
-  const [confirmPayload, setConfirmPayload] = useState<RetryParams>({})
+  const [confirmPayload, setConfirmPayload] = useState<
+    Record<string, JsonValue>
+  >({})
   const [submissions, setSubmissions] = useState<
     Record<string, SubmissionState>
   >({})
-  const [retryParams, setRetryParams] = useState<Record<string, RetryParams>>(
-    () => {
-      const init: Record<string, RetryParams> = {}
-      for (const name of RETRY_COMMAND_NAMES) {
-        init[name] = retryDefaultParams(name)
-      }
-      return init
-    },
-  )
 
-  const updateRetryParam = useCallback(
-    (cmdName: string, key: string, value: JsonValue) => {
-      setRetryParams((prev) => ({
-        ...prev,
-        [cmdName]: { ...prev[cmdName], [key]: value },
-      }))
-    },
-    [],
+  const pcCommands = discovery.commands.filter((c) =>
+    PC_COMMAND_NAMES.has(c.name),
   )
 
   const handleSubmit = useCallback(
-    async (cmdName: string, payload: RetryParams) => {
+    async (cmdName: string, payload: Record<string, JsonValue>) => {
       if (!client) return
 
       setSubmissions((prev) => ({
@@ -132,6 +127,17 @@ export function ProcessControlPanel() {
     },
     [client],
   )
+
+  const handleTabChange = (type: RetryType) => {
+    const cachedParams = paramsCache.current[type] ?? DEFAULT_PARAMS[type]
+    setRetryState(type, cachedParams)
+  }
+
+  const handleParamChange = (key: string, value: JsonValue) => {
+    const updatedParams = { ...params, [key]: value }
+    paramsCache.current[activeRetryType] = updatedParams
+    setRetryState(activeRetryType, updatedParams)
+  }
 
   if (!hasToken) {
     return (
@@ -187,7 +193,7 @@ export function ProcessControlPanel() {
               流程控制
             </h2>
             <p className="text-xs text-muted-foreground">
-              {pcCommands.length} 流程控制指令 · {retryCommands.length} 重试类型
+              {pcCommands.length} 流程控制指令 · 3 重试类型
             </p>
           </div>
         </div>
@@ -291,55 +297,81 @@ export function ProcessControlPanel() {
               </div>
             </div>
 
-            {/* Retry Cards */}
-            {retryCommands.length > 0 && (
-              <div className="space-y-3">
-                <div className="flex items-center gap-2">
-                  <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                    重试触发
-                  </h3>
-                  <span className="text-[10px] text-muted-foreground">
-                    {retryCommands.length} 种重试类型
-                  </span>
-                </div>
-                <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-                  {retryCommands.map((cmd) => (
-                    <RetryCard
-                      key={cmd.name}
-                      command={cmd}
-                      params={retryParams[cmd.name] ?? {}}
-                      submission={submissions[cmd.name]}
-                      onParamChange={(key, value) =>
-                        updateRetryParam(cmd.name, key, value)
-                      }
-                      onExecute={(payload) => {
-                        setConfirmPayload(payload)
-                        setConfirmCommand(cmd)
-                      }}
-                    />
-                  ))}
-                </div>
+            {/* Retry State Controller */}
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  重试状态
+                </h3>
+                <span
+                  className={cn(
+                    "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium",
+                    connected
+                      ? "bg-emerald-100 text-emerald-800"
+                      : "bg-amber-100 text-amber-800",
+                  )}
+                >
+                  {connected ? (
+                    <>
+                      <Wifi className="size-2.5" />
+                      已同步
+                    </>
+                  ) : (
+                    <>
+                      <WifiOff className="size-2.5" />
+                      {retrySyncStatus === "reconnecting"
+                        ? "重连中"
+                        : "未连接"}
+                    </>
+                  )}
+                </span>
+                <span className="text-[10px] text-muted-foreground">
+                  rev {revision}
+                </span>
               </div>
-            )}
 
-            {retryCommands.length === 0 && (
-              <div className="flex items-center justify-center py-12">
-                <div className="max-w-md rounded-lg border border-border bg-card p-8 text-center">
-                  <Play className="mx-auto mb-3 size-10 text-muted-foreground" />
-                  <p className="text-sm font-semibold text-card-foreground">
-                    未发现重试命令
-                  </p>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    请检查管理 agent 的命令配置中是否注册了重试命令
-                  </p>
+              {retrySyncError && (
+                <div className="rounded-md bg-red-50 px-3 py-2 text-xs text-red-700">
+                  {retrySyncError.message}
                 </div>
+              )}
+
+              {/* Tabs */}
+              <div className="flex shrink-0 border-b border-border">
+                {RETRY_TYPE_ORDER.map((type) => (
+                  <button
+                    key={type}
+                    type="button"
+                    onClick={() => handleTabChange(type)}
+                    className={cn(
+                      "px-5 py-2.5 text-base font-medium transition-colors border-b-2 -mb-px",
+                      activeRetryType === type
+                        ? "border-primary text-primary"
+                        : "border-transparent text-muted-foreground hover:text-foreground",
+                    )}
+                  >
+                    {RETRY_TYPE_LABELS[type]}
+                  </button>
+                ))}
               </div>
-            )}
+
+              {/* Active tab params */}
+              <div className="rounded-lg border border-border bg-card p-4">
+                <RetryParamsInput
+                  cmdName={activeRetryType}
+                  params={params}
+                  onChange={handleParamChange}
+                />
+                <p className="mt-3 text-[10px] text-muted-foreground">
+                  参数修改后自动同步至所有设备并触发 ROS 重试命令
+                </p>
+              </div>
+            </div>
           </div>
         </main>
       </div>
 
-      {/* Confirmation Dialog — shared */}
+      {/* Confirmation Dialog — for sidebar process control commands only */}
       <Dialog
         open={!!confirmCommand}
         onOpenChange={() => {
@@ -351,10 +383,7 @@ export function ProcessControlPanel() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <AlertTriangle className="size-5 text-amber-500" />
-              确认执行
-              {PC_COMMAND_NAMES.has(confirmCommand?.name ?? "")
-                ? "流程控制命令"
-                : "重试命令"}
+              确认执行流程控制命令
             </DialogTitle>
             <DialogDescription>
               即将执行{" "}
@@ -368,19 +397,6 @@ export function ProcessControlPanel() {
             <p className="text-xs text-muted-foreground">
               {confirmCommand?.description}
             </p>
-            {Object.keys(confirmPayload).length > 0 && (
-              <div className="rounded-md bg-muted/50 p-2">
-                <p className="mb-1 text-[10px] font-semibold text-muted-foreground">
-                  参数
-                </p>
-                {Object.entries(confirmPayload).map(([key, value]) => (
-                  <p
-                    key={key}
-                    className="text-xs text-card-foreground"
-                  >{`${key}: ${JSON.stringify(value)}`}</p>
-                ))}
-              </div>
-            )}
             <p className="text-xs font-semibold text-amber-600">
               此操作将通过 ROS topic 触发 master_full 内部流程，请确认系统已就绪
             </p>
@@ -413,84 +429,6 @@ export function ProcessControlPanel() {
   )
 }
 
-/* ── Retry Card ── */
-
-interface RetryCardProps {
-  command: CommandDefinition
-  params: RetryParams
-  submission?: SubmissionState
-  onParamChange: (key: string, value: JsonValue) => void
-  onExecute: (payload: RetryParams) => void
-}
-
-function RetryCard({
-  command,
-  params,
-  submission,
-  onParamChange,
-  onExecute,
-}: RetryCardProps) {
-  return (
-    <div className="rounded-lg border border-border bg-card">
-      <div className="border-b border-border bg-muted/30 px-4 py-3">
-        <h4 className="text-sm font-medium text-card-foreground">
-          {command.name}
-        </h4>
-        <p className="mt-0.5 text-xs text-muted-foreground">
-          {command.description}
-        </p>
-      </div>
-
-      <div className="space-y-3 px-4 py-3">
-        <RetryParamsInput
-          cmdName={command.name}
-          params={params}
-          onChange={onParamChange}
-        />
-      </div>
-
-      <div className="flex items-center justify-between border-t border-border px-4 py-3">
-        <div className="flex items-center gap-2">
-          {submission?.lastResponse && (
-            <span
-              className={cn(
-                "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium",
-                submission.lastResponse.accepted
-                  ? "bg-emerald-100 text-emerald-800"
-                  : "bg-red-100 text-red-800",
-              )}
-            >
-              {submission.lastResponse.accepted ? (
-                <CheckCircle2 className="size-3" />
-              ) : (
-                <XCircle className="size-3" />
-              )}
-              {submission.lastResponse.result}
-            </span>
-          )}
-          {submission?.error && (
-            <span className="inline-flex items-center rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-medium text-red-800">
-              {submission.error}
-            </span>
-          )}
-        </div>
-        <Button
-          size="sm"
-          disabled={submission?.submitting}
-          onClick={() => onExecute(params)}
-        >
-          {submission?.submitting ? (
-            <LoaderCircle className="mr-1.5 size-3.5 animate-spin" />
-          ) : (
-            <Send className="mr-1.5 size-3.5" />
-          )}
-          执行
-        </Button>
-      </div>
-    </div>
-  )
-}
-
 /* ── Retry Params Input ── */
 
 function RetryParamsInput({
@@ -499,7 +437,7 @@ function RetryParamsInput({
   onChange,
 }: {
   cmdName: string
-  params: RetryParams
+  params: RetryStateParams
   onChange: (key: string, value: JsonValue) => void
 }) {
   switch (cmdName) {
@@ -517,10 +455,10 @@ function RetryParamsInput({
             onChange={(v) => onChange("spear_index", v)}
           />
           <ParamField label="previous_spear_needs_dock">
-            <label className="flex items-center gap-2 text-xs text-card-foreground">
+            <label className="flex items-center gap-2 text-sm text-card-foreground">
               <input
                 type="checkbox"
-                className="size-3.5 rounded border-border"
+                className="size-5 rounded border-border"
                 checked={(params.previous_spear_needs_dock as boolean) ?? false}
                 onChange={(e) =>
                   onChange("previous_spear_needs_dock", e.target.checked)
@@ -612,7 +550,7 @@ function RadioGroup({
             key={opt.value}
             type="button"
             className={cn(
-              "rounded-md border px-2.5 py-1 text-xs font-medium transition-colors",
+              "rounded-md border px-4 py-2 text-sm font-medium transition-colors",
               selected === opt.value
                 ? "border-primary bg-primary text-primary-foreground"
                 : "border-border bg-card text-card-foreground hover:bg-muted",
@@ -651,7 +589,7 @@ function MultiCheckbox({
               key={opt}
               type="button"
               className={cn(
-                "rounded-md border px-2.5 py-1 text-xs font-medium transition-colors",
+                "rounded-md border px-4 py-2 text-sm font-medium transition-colors",
                 checked
                   ? "border-primary bg-primary text-primary-foreground"
                   : "border-border bg-card text-card-foreground hover:bg-muted",

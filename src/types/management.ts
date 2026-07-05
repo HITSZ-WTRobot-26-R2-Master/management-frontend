@@ -719,6 +719,45 @@ export interface ManagementEvent {
     | Record<string, unknown>
 }
 
+export type RetryType = "retry_take_spear" | "retry_merlin" | "retry_combat"
+
+export interface RetryStateParams {
+  spear_index?: number
+  previous_spear_needs_dock?: boolean
+  r2_taken_count?: number
+  taken_r2_blocks?: number[]
+  combat_source?: number
+  combat_place_layer?: number
+}
+
+export interface RetryStateSnapshot {
+  active_retry_type: RetryType
+  params: RetryStateParams
+  revision: number
+}
+
+export interface RetryStateUpdate {
+  active_retry_type: RetryType
+  params: RetryStateParams
+}
+
+export interface RetryStateSnapshotMessage {
+  type: "retry_state_snapshot"
+  time: string
+  snapshot: RetryStateSnapshot
+}
+
+export interface RetryStateErrorMessage {
+  type: "retry_state_error"
+  time: string
+  code: string
+  message: string
+}
+
+export type RetryStateWebSocketMessage =
+  | RetryStateSnapshotMessage
+  | RetryStateErrorMessage
+
 export type ConnectionStatus =
   | "idle"
   | "checking"
