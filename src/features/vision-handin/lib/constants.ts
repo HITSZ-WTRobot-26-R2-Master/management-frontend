@@ -69,8 +69,8 @@ export function getIdMap(color: SystemMode["color"], direction: SystemMode["dire
 }
 
 export function getSideLabels(color: SystemMode["color"], direction: SystemMode["direction"]): { left: string; right: string } {
-  const leftBlue = "决胜区/竞技场";
-  const rightBlue = "启动区/武馆";
+  const leftBlue = "决胜区\n竞技场\n三区";
+  const rightBlue = "启动区\n武馆\n一区";
 
   if (color === "blue") {
     if (direction === "front") {
