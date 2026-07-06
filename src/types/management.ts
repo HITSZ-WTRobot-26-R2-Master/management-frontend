@@ -47,6 +47,33 @@ export interface ApiError {
   message: string
 }
 
+export interface DecisionScrollPick {
+  from: number
+  get: number
+}
+
+export interface DecisionSnapshot {
+  available: boolean
+  topic: string
+  received_at: string | null
+  action_order: number[]
+  scroll_picks: DecisionScrollPick[]
+  revision: number
+}
+
+export type DecisionWebSocketMessage =
+  | {
+      type: "decision_snapshot"
+      time: string
+      snapshot: DecisionSnapshot
+    }
+  | {
+      type: "decision_error"
+      time: string
+      code: string
+      message: string
+    }
+
 export type ApiErrorCode =
   | "auth_required"
   | "auth_invalid"

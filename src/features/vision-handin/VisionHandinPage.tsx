@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { Link } from "react-router-dom";
 import { useBlockState } from "./hooks/useBlockState";
+import { useDecision } from "./hooks/useDecision";
 import { SystemToggle } from "./components/SystemToggle";
 import { MatchTypeToggle } from "./components/MatchTypeToggle";
 import { SidePanel } from "./components/SidePanel";
@@ -34,6 +35,7 @@ export function VisionHandinPage() {
     setMatchType,
     status,
   } = useBlockState();
+  const { decision } = useDecision();
 
   const counts = useMemo(() => {
     const c: Record<string, number> = { r1: 0, r2: 0, null: 0, fake: 0 };
@@ -107,7 +109,12 @@ export function VisionHandinPage() {
       <main className="flex-1 flex items-stretch gap-2 p-4 min-h-0">
         <SidePanel side="left" mode={mode} />
         <div className="flex-1 min-h-0">
-          <MainGrid blocks={blocks} mode={mode} onCellChange={setBlockState} />
+          <MainGrid
+            blocks={blocks}
+            decision={decision}
+            mode={mode}
+            onCellChange={setBlockState}
+          />
         </div>
         <SidePanel side="right" mode={mode} />
         {/* 控制栏：独立一列，上下占满 */}

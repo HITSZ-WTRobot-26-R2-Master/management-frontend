@@ -31,11 +31,11 @@ export function GridCell({ id, state, onChange }: GridCellProps) {
 
   return (
     <div
-      className="flex flex-col items-center p-1 border rounded-lg h-full @container"
+      className="relative flex flex-col items-center p-1 border rounded-lg h-full @container"
       style={{ backgroundColor: bgColor }}
     >
       {/* 第一行：编号 + 状态，上下堆叠，占一半高度 */}
-      <div className="flex flex-col items-center justify-center leading-none font-medium flex-1 min-h-0">
+      <div className="relative z-20 flex flex-col items-center justify-center leading-none font-medium flex-1 min-h-0">
         <span className="font-bold text-[clamp(1rem,10cqw,3.5rem)] leading-tight">
           <span className="text-white/40">#{id}</span>{" "}
           <span className="text-white/90">{height}mm</span>
@@ -45,7 +45,7 @@ export function GridCell({ id, state, onChange }: GridCellProps) {
         </span>
       </div>
       {/* 第二/三行：2×2 按钮矩阵，占一半高度，横向 2/3 宽度 */}
-      <div className="grid grid-cols-2 gap-1 w-2/3 px-1 flex-1 min-h-0"
+      <div className="relative z-20 grid grid-cols-2 gap-1 w-2/3 px-1 flex-1 min-h-0"
         style={{ gridTemplateRows: "1fr 1fr" }}>
         {buttons.map((btn) => (
           <Button

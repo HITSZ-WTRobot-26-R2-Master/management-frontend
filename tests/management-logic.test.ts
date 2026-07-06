@@ -22,6 +22,7 @@ import {
   buildManagementHttpUrl,
   buildDashboardWebSocketUrl,
   buildBlockStatesWebSocketUrl,
+  buildDecisionWebSocketUrl,
   buildServiceLogWebSocketUrl,
   isChassisStateSnapshot,
   isDashboardSnapshot,
@@ -44,6 +45,13 @@ import {
   trimServiceLogLines,
 } from "../src/lib/service-log-stream"
 import { parseBlockStateMessage } from "../src/features/vision-handin/lib/blockStateStream"
+import { parseDecisionMessage } from "../src/features/vision-handin/lib/decisionStream"
+import {
+  buildDecisionOverlayModel,
+  entryPointNear,
+  exitPointNear,
+  getStepCenters,
+} from "../src/features/vision-handin/lib/decisionOverlay"
 import {
   BLOCK_STATE_RECONNECT_DELAY_MS,
   getBlockStateReconnectDelayMs,
@@ -295,6 +303,12 @@ describe("management API URL helpers", () => {
     ).toBe("ws://127.0.0.1:8080/ws/block-states?token=change-me")
   })
 
+  test("builds decision WebSocket URLs with query token auth", () => {
+    expect(
+      buildDecisionWebSocketUrl("http://127.0.0.1:8080", "change-me"),
+    ).toBe("ws://127.0.0.1:8080/ws/decision?token=change-me")
+  })
+
   test("builds dashboard WebSocket URLs with query token auth", () => {
     expect(
       buildDashboardWebSocketUrl("http://127.0.0.1:8080", "change-me"),
@@ -360,6 +374,8 @@ describe("vision hand-in block state stream", () => {
         "null",
       ],
       revision: 7,
+      color: "blue",
+      matchType: "competition_full",
     })
   })
 
@@ -404,6 +420,106 @@ describe("vision hand-in block state stream", () => {
         }),
       ),
     ).toBeNull()
+  })
+})
+
+describe("vision hand-in decision stream", () => {
+  test("parses decision snapshot envelopes from the backend", () => {
+    expect(
+      parseDecisionMessage(
+        JSON.stringify({
+          type: "decision_snapshot",
+          time: "2026-07-06T12:00:00Z",
+          snapshot: {
+            available: true,
+            topic: "/decision",
+            received_at: "2026-07-06T12:00:00Z",
+            action_order: [0, 1, 5, 12, 0],
+            scroll_picks: [{ from: 0, get: 5 }, { from: 5, get: 12 }],
+            revision: 9,
+          },
+        }),
+      ),
+    ).toEqual({
+      type: "decision_snapshot",
+      snapshot: {
+        available: true,
+        topic: "/decision",
+        received_at: "2026-07-06T12:00:00Z",
+        action_order: [0, 1, 5, 12, 0],
+        scroll_picks: [{ from: 0, get: 5 }, { from: 5, get: 12 }],
+        revision: 9,
+      },
+    })
+  })
+
+  test("rejects malformed decision messages", () => {
+    expect(parseDecisionMessage("{")).toBeNull()
+    expect(
+      parseDecisionMessage(
+        JSON.stringify({
+          type: "decision_snapshot",
+          snapshot: {
+            available: true,
+            topic: "/decision",
+            received_at: null,
+            action_order: [13],
+            scroll_picks: [],
+            revision: 1,
+          },
+        }),
+      ),
+    ).toBeNull()
+    expect(
+      parseDecisionMessage(
+        JSON.stringify({
+          type: "decision_snapshot",
+          snapshot: {
+            available: true,
+            topic: "/decision",
+            received_at: null,
+            action_order: [1],
+            scroll_picks: [{ from: 0, get: 0 }],
+            revision: 1,
+          },
+        }),
+      ),
+    ).toBeNull()
+  })
+
+  test("builds decision overlay path and scroll markers from current grid orientation", () => {
+    const mode = {
+      color: "blue",
+      direction: "front",
+      matchType: "competition_full",
+    } as const
+    const centers = getStepCenters(mode)
+    const stepOne = centers.get(1)
+    const stepFive = centers.get(5)
+    const stepTwelve = centers.get(12)
+
+    expect(stepOne).toBeDefined()
+    expect(stepFive).toBeDefined()
+    expect(stepTwelve).toBeDefined()
+
+    const model = buildDecisionOverlayModel(
+      {
+        available: true,
+        topic: "/decision",
+        received_at: "2026-07-06T12:00:00Z",
+        action_order: [0, 1, 5, 12, 0],
+        scroll_picks: [{ from: 0, get: 5 }, { from: 5, get: 12 }],
+        revision: 1,
+      },
+      mode,
+    )
+
+    expect(model.pathSegments).toHaveLength(4)
+    expect(model.scrollCircles).toHaveLength(2)
+    expect(model.scrollArrows).toHaveLength(2)
+    expect(model.pathSegments[0].from).toEqual(entryPointNear(stepOne!, mode))
+    expect(model.pathSegments[3].to).toEqual(exitPointNear(stepTwelve!, mode))
+    expect(model.scrollCircles[0].center).toEqual(stepFive)
   })
 })
 

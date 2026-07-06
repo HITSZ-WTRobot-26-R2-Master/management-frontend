@@ -426,6 +426,14 @@ export function buildBlockStatesWebSocketUrl(baseUrl: string, token: string) {
   ).toString()
 }
 
+export function buildDecisionWebSocketUrl(baseUrl: string, token: string) {
+  return buildManagementWebSocketEndpointUrl(
+    baseUrl,
+    "/ws/decision",
+    token,
+  ).toString()
+}
+
 export function buildLaserDetailWebSocketUrl(baseUrl: string, token: string) {
   return buildManagementWebSocketEndpointUrl(
     baseUrl,
