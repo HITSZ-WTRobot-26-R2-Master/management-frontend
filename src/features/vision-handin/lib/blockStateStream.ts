@@ -47,7 +47,7 @@ export function parseBlockStateMessage(data: unknown): ParsedBlockStateMessage |
         blocks: snapshot.states.map(blockStateValueToState),
         revision: snapshot.revision,
         color: isValidColor(snapshot.color) ? snapshot.color : "blue",
-        matchType: isValidMatchType(snapshot.match_type) ? snapshot.match_type : "arena",
+        matchType: isValidMatchType(snapshot.match_type) ? snapshot.match_type : "competition_full",
       };
     }
 
@@ -87,10 +87,10 @@ function isValidColor(value: unknown): value is SystemMode["color"] {
 
 function isValidMatchType(value: unknown): value is MatchType {
   return (
-    value === "skill_zone1" ||
-    value === "skill_zone3_mid" ||
-    value === "skill_zone3_top" ||
-    value === "arena"
+    value === "martial_merlin" ||
+    value === "combat_only_middle" ||
+    value === "combat_only_top" ||
+    value === "competition_full"
   );
 }
 

@@ -1,16 +1,16 @@
 export type BlockState = "unknown" | "null" | "r1" | "r2" | "fake";
 
 export type MatchType =
-  | "skill_zone1"
-  | "skill_zone3_mid"
-  | "skill_zone3_top"
-  | "arena";
+  | "martial_merlin"
+  | "combat_only_middle"
+  | "combat_only_top"
+  | "competition_full";
 
 export const MATCH_TYPE_LABELS: Record<MatchType, string> = {
-  skill_zone1: "技能赛\n一区",
-  skill_zone3_mid: "技能赛\n三区中层",
-  skill_zone3_top: "技能赛\n三区顶层",
-  arena: "竞技赛",
+  martial_merlin: "技能赛\n一区",
+  combat_only_middle: "技能赛\n三区中层",
+  combat_only_top: "技能赛\n三区顶层",
+  competition_full: "竞技赛",
 };
 
 export interface SystemMode {

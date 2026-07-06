@@ -50,7 +50,7 @@ export function useBlockState() {
   const [mode, setModeState] = useState<SystemMode>(() => ({
     color: getParam("color", "blue") as SystemMode["color"],
     direction: getParam("direction", "front") as SystemMode["direction"],
-    matchType: getParam("match_type", "arena") as SystemMode["matchType"],
+    matchType: getParam("match_type", "competition_full") as SystemMode["matchType"],
   }));
 
   const setMode = useCallback((newMode: SystemMode | ((prev: SystemMode) => SystemMode)) => {

@@ -8,17 +8,17 @@ interface MatchTypeToggleProps {
 }
 
 const MATCH_COLORS: Record<MatchType, string> = {
-  skill_zone1: "bg-emerald-500 text-white",
-  skill_zone3_mid: "bg-amber-500 text-white",
-  skill_zone3_top: "bg-purple-500 text-white",
-  arena: "bg-rose-500 text-white",
+  martial_merlin: "bg-emerald-500 text-white",
+  combat_only_middle: "bg-amber-500 text-white",
+  combat_only_top: "bg-purple-500 text-white",
+  competition_full: "bg-rose-500 text-white",
 };
 
 const MATCH_OPTIONS: MatchType[] = [
-  "skill_zone1",
-  "skill_zone3_mid",
-  "skill_zone3_top",
-  "arena",
+  "martial_merlin",
+  "combat_only_middle",
+  "combat_only_top",
+  "competition_full",
 ];
 
 export function MatchTypeToggle({ matchType, onChange }: MatchTypeToggleProps) {
