@@ -1,12 +1,14 @@
 import type { BlockStateValue } from "@/types/management";
 import { STATE_VALUES, VALUE_TO_STATE } from "./constants";
-import type { BlockState } from "./types";
+import type { BlockState, MatchType, SystemMode } from "./types";
 
 export type ParsedBlockStateMessage =
   | {
       type: "block_states_snapshot";
       blocks: BlockState[];
       revision: number;
+      color: SystemMode["color"];
+      matchType: MatchType;
     }
   | {
       type: "block_states_error";
@@ -44,6 +46,8 @@ export function parseBlockStateMessage(data: unknown): ParsedBlockStateMessage |
         type: "block_states_snapshot",
         blocks: snapshot.states.map(blockStateValueToState),
         revision: snapshot.revision,
+        color: isValidColor(snapshot.color) ? snapshot.color : "blue",
+        matchType: isValidMatchType(snapshot.match_type) ? snapshot.match_type : "arena",
       };
     }
 
@@ -63,6 +67,31 @@ export function parseBlockStateMessage(data: unknown): ParsedBlockStateMessage |
   } catch {
     return null;
   }
+}
+
+export function serializeBlockStatesUpdate(
+  blocks: BlockState[],
+  color: SystemMode["color"],
+  matchType: MatchType,
+): string {
+  return JSON.stringify({
+    states: blocks.map(blockStateToValue),
+    color,
+    match_type: matchType,
+  });
+}
+
+function isValidColor(value: unknown): value is SystemMode["color"] {
+  return value === "blue" || value === "red";
+}
+
+function isValidMatchType(value: unknown): value is MatchType {
+  return (
+    value === "skill_zone1" ||
+    value === "skill_zone3_mid" ||
+    value === "skill_zone3_top" ||
+    value === "arena"
+  );
 }
 
 function blockStateValueToState(value: BlockStateValue): BlockState {

@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { Link } from "react-router-dom";
 import { useBlockState } from "./hooks/useBlockState";
 import { SystemToggle } from "./components/SystemToggle";
+import { MatchTypeToggle } from "./components/MatchTypeToggle";
 import { SidePanel } from "./components/SidePanel";
 import { MainGrid } from "./components/MainGrid";
 import type { BlockSyncStatus } from "./hooks/useBlockState";
@@ -30,6 +31,7 @@ export function VisionHandinPage() {
     mode,
     setBlockState,
     setMode,
+    setMatchType,
     status,
   } = useBlockState();
 
@@ -109,8 +111,13 @@ export function VisionHandinPage() {
         </div>
         <SidePanel side="right" mode={mode} />
         {/* 控制栏：独立一列，上下占满 */}
-        <div className="flex flex-col items-center justify-center gap-3 p-2 rounded-lg bg-background/60 backdrop-blur-sm w-[clamp(70px,8vw,120px)] h-full">
-          <SystemToggle mode={mode} onChange={setMode} />
+        <div className="flex flex-row items-stretch justify-center gap-2 p-2 rounded-lg bg-background/60 backdrop-blur-sm h-full">
+          <div className="w-[clamp(60px,7vw,100px)]">
+            <SystemToggle mode={mode} onChange={setMode} />
+          </div>
+          <div className="w-[clamp(60px,7vw,100px)]">
+            <MatchTypeToggle matchType={mode.matchType} onChange={setMatchType} />
+          </div>
         </div>
       </main>
       {/* 对方方向指示（下） */}

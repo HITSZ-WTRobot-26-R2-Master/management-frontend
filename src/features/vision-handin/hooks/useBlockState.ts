@@ -10,8 +10,8 @@ import {
   baseUrlAtom,
 } from "@/state/operator-shell";
 import type { ApiError } from "@/types/management";
-import type { BlockState, SystemMode } from "../lib/types";
-import { blockStateToValue, parseBlockStateMessage } from "../lib/blockStateStream";
+import type { BlockState, MatchType, SystemMode } from "../lib/types";
+import { parseBlockStateMessage, serializeBlockStatesUpdate } from "../lib/blockStateStream";
 import { getBlockStateReconnectDelayMs } from "../lib/blockStateConnection";
 
 const INITIAL_BLOCKS: BlockState[] = Array(12).fill("null");
@@ -32,6 +32,7 @@ function syncUrl(mode: SystemMode) {
   const params = new URLSearchParams();
   params.set("color", mode.color);
   params.set("direction", mode.direction);
+  params.set("match_type", mode.matchType);
   const url = `${window.location.pathname}?${params.toString()}`;
   window.history.replaceState(null, "", url);
 }
@@ -49,11 +50,18 @@ export function useBlockState() {
   const [mode, setModeState] = useState<SystemMode>(() => ({
     color: getParam("color", "blue") as SystemMode["color"],
     direction: getParam("direction", "front") as SystemMode["direction"],
+    matchType: getParam("match_type", "arena") as SystemMode["matchType"],
   }));
 
   const setMode = useCallback((newMode: SystemMode | ((prev: SystemMode) => SystemMode)) => {
     setModeState((prev) => {
       const next = typeof newMode === "function" ? newMode(prev) : newMode;
+      if (wsRef.current?.readyState === WebSocket.OPEN) {
+        wsRef.current.send(JSON.stringify({
+          color: next.color,
+          match_type: next.matchType,
+        }));
+      }
       return next;
     });
   }, []);
@@ -113,6 +121,15 @@ export function useBlockState() {
 
         if (message.type === "block_states_snapshot") {
           setBlocks(message.blocks);
+          setModeState((prev) => {
+            if (
+              prev.color === message.color &&
+              prev.matchType === message.matchType
+            ) {
+              return prev;
+            }
+            return { ...prev, color: message.color, matchType: message.matchType };
+          });
           setStatus("live");
           setError(null);
           return;
@@ -172,7 +189,7 @@ export function useBlockState() {
     );
     setBlocks(nextBlocks);
     if (wsRef.current?.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify(nextBlocks.map(blockStateToValue)));
+      wsRef.current.send(serializeBlockStatesUpdate(nextBlocks, mode.color, mode.matchType));
       setStatus("live");
       setError(null);
       return;
@@ -183,13 +200,18 @@ export function useBlockState() {
       code: "request_failed",
       message: "块状态 WebSocket 未连接，已保留本地更改并等待重连",
     });
-  }, [blocks, hasToken]);
+  }, [blocks, hasToken, mode.color, mode.matchType]);
+
+  const setMatchType = useCallback((matchType: MatchType) => {
+    setMode((prev) => ({ ...prev, matchType }));
+  }, [setMode]);
 
   return {
     blocks,
     setBlockState,
     mode,
     setMode,
+    setMatchType,
     connected: status === "live",
     status,
     error,
