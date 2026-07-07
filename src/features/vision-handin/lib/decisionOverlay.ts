@@ -24,7 +24,10 @@ export interface DecisionOverlayModel {
 
 const GRID_COLUMNS = [0.3, 1, 1, 1, 1, 0.3];
 const GRID_ROWS = [0.3, 1, 1, 1, 0.3];
-const ENTRY_EXIT_OFFSET = 0.34;
+const OUTSIDE_GRID_ANCHOR_X = {
+  left: -4,
+  right: 104,
+} as const;
 
 export function buildDecisionOverlayModel(
   decision: DecisionSnapshot | null | undefined,
@@ -126,9 +129,8 @@ function centerFromWeights(weights: number[], index: number): number {
 }
 
 function edgePointNear(step: OverlayPoint, direction: "left" | "right"): OverlayPoint {
-  const offset = (100 / GRID_COLUMNS.reduce((sum, item) => sum + item, 0)) * ENTRY_EXIT_OFFSET;
   return {
-    x: direction === "left" ? step.x - offset : step.x + offset,
+    x: OUTSIDE_GRID_ANCHOR_X[direction],
     y: step.y,
   };
 }

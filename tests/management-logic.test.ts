@@ -519,6 +519,8 @@ describe("vision hand-in decision stream", () => {
     expect(model.scrollArrows).toHaveLength(2)
     expect(model.pathSegments[0].from).toEqual(entryPointNear(stepOne!, mode))
     expect(model.pathSegments[3].to).toEqual(exitPointNear(stepTwelve!, mode))
+    expect(model.pathSegments[0].from.x).toBe(104)
+    expect(model.pathSegments[3].to.x).toBe(-4)
     expect(model.scrollCircles[0].center).toEqual(stepFive)
   })
 })

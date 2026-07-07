@@ -73,7 +73,7 @@ export function MainGrid({ blocks, decision, mode, onCellChange }: MainGridProps
             orient="auto"
             markerUnits="strokeWidth"
           >
-            <path d="M0,0 L6,3 L0,6 Z" fill="rgba(34, 211, 238, 0.88)" />
+            <path d="M0,0 L6,3 L0,6 Z" fill="rgba(168, 85, 247, 0.9)" />
           </marker>
         </defs>
         {overlay.pathSegments.map((segment, index) => (
@@ -83,8 +83,8 @@ export function MainGrid({ blocks, decision, mode, onCellChange }: MainGridProps
             y1={segment.from.y}
             x2={segment.to.x}
             y2={segment.to.y}
-            stroke="rgba(251, 191, 36, 0.82)"
-            strokeWidth={1.25}
+            stroke="rgba(0, 0, 0, 0.82)"
+            strokeWidth={4}
             strokeLinecap="round"
             vectorEffect="non-scaling-stroke"
           />
@@ -96,26 +96,26 @@ export function MainGrid({ blocks, decision, mode, onCellChange }: MainGridProps
             y1={segment.from.y}
             x2={segment.to.x}
             y2={segment.to.y}
-            stroke="rgba(34, 211, 238, 0.88)"
-            strokeWidth={1}
+            stroke="rgba(168, 85, 247, 0.9)"
+            strokeWidth={3}
             strokeLinecap="round"
             markerEnd="url(#decision-scroll-arrowhead)"
             vectorEffect="non-scaling-stroke"
           />
         ))}
+      </svg>
+      <div className="pointer-events-none absolute inset-0 z-10 overflow-visible" aria-hidden="true">
         {overlay.scrollCircles.map((circle, index) => (
-          <circle
+          <div
             key={`scroll-circle-${index}`}
-            cx={circle.center.x}
-            cy={circle.center.y}
-            r={4.5}
-            fill="transparent"
-            stroke="rgba(34, 211, 238, 0.92)"
-            strokeWidth={1.25}
-            vectorEffect="non-scaling-stroke"
+            className="absolute h-11 w-11 -translate-x-1/2 -translate-y-1/2 rounded-full border-[3px] border-purple-500/90"
+            style={{
+              left: `${circle.center.x}%`,
+              top: `${circle.center.y}%`,
+            }}
           />
         ))}
-      </svg>
+      </div>
     </div>
   );
 }
