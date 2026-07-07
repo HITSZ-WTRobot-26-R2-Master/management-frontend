@@ -231,6 +231,48 @@ describe("management API errors", () => {
     ])
   })
 
+  test("requests master_full hard restart with confirmation", async () => {
+    const responseBody = {
+      request_id: "restart-1",
+      service: "master_full",
+      mode: "hard",
+      accepted: true,
+      started_at: "2026-07-07T04:00:00Z",
+      finished_at: "2026-07-07T04:00:02Z",
+      result: "success",
+    }
+    let requestBody: BodyInit | null | undefined = undefined
+    const client = new ManagementApiClient({
+      baseUrl: "/management-api",
+      token: "operator-token",
+      fetchImpl: async (input, init) => {
+        expect(input.toString()).toBe(
+          "/management-api/api/services/master_full/restart",
+        )
+        expect(init?.method).toBe("POST")
+        expect(new Headers(init?.headers).get("Authorization")).toBe(
+          "Bearer operator-token",
+        )
+        expect(new Headers(init?.headers).get("Content-Type")).toBe(
+          "application/json",
+        )
+        requestBody = init?.body
+
+        return new Response(JSON.stringify(responseBody), {
+          headers: {
+            "Content-Type": "application/json",
+          },
+          status: 200,
+        })
+      },
+    })
+
+    await expect(
+      client.restartService("master_full", { mode: "hard", confirm: true }),
+    ).resolves.toEqual(responseBody)
+    expect(requestBody).toBe(JSON.stringify({ mode: "hard", confirm: true }))
+  })
+
   test("detects browser abort errors without relying on Error inheritance", () => {
     expect(isAbortError({ name: "AbortError" })).toBe(true)
     expect(isAbortError(new Error("AbortError"))).toBe(false)

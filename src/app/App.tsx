@@ -100,6 +100,7 @@ import {
 } from "@/hooks/useSelectedServiceDiagnostics"
 import { useServicesSnapshot } from "@/hooks/useServicesSnapshot"
 import {
+  AUTH_REQUIRED_ERROR,
   createManagementApiClient,
   getApiError,
   hasManagementAuthToken,
@@ -161,6 +162,19 @@ interface ServiceFilterState {
 }
 
 const allFilterValue = "all"
+const masterFullServiceName = "master_full"
+
+interface QuickRestartState {
+  error: ApiError | null
+  response: RestartResponse | null
+  submitting: boolean
+}
+
+const initialQuickRestartState = {
+  error: null,
+  response: null,
+  submitting: false,
+} satisfies QuickRestartState
 
 const levelStyles: Record<OverallLevel, string> = {
   ok: "border-emerald-200 bg-emerald-50 text-emerald-800",
@@ -272,6 +286,9 @@ export function App() {
 function ManagementApp() {
   const services = useAtomValue(serviceStatusesAtom)
   const selectedService = useAtomValue(selectedServiceAtom)
+  const token = useAtomValue(authTokenAtom)
+  const client = useAtomValue(managementApiClientAtom)
+  const setLatestError = useSetAtom(latestErrorAtom)
   const setSelectedServiceName = useSetAtom(selectedServiceNameAtom)
   const navigate = useNavigate()
   const connectionState = useAtomValue(connectionStateAtom)
@@ -313,6 +330,8 @@ function ManagementApp() {
   const resetOriginCommand =
     commandDiscovery.discovery.commands.find(isResetOriginCommand) ?? null
   const [resetOriginDrawerOpen, setResetOriginDrawerOpen] = useState(false)
+  const [masterFullRestart, setMasterFullRestart] =
+    useState<QuickRestartState>(initialQuickRestartState)
   const refreshing =
     snapshot.refreshing ||
     commandDiscovery.discovery.refreshing ||
@@ -333,6 +352,48 @@ function ManagementApp() {
     [navigate, setSelectedServiceName],
   )
 
+  const handleRestartMasterFull = useCallback(async () => {
+    if (!hasManagementAuthToken(token)) {
+      setMasterFullRestart({
+        error: AUTH_REQUIRED_ERROR,
+        response: null,
+        submitting: false,
+      })
+      setLatestError(AUTH_REQUIRED_ERROR)
+      return
+    }
+
+    setMasterFullRestart((current) => ({
+      ...current,
+      error: null,
+      submitting: true,
+    }))
+
+    try {
+      const response = await client.restartService(masterFullServiceName, {
+        mode: "hard",
+        confirm: true,
+      })
+
+      setMasterFullRestart({
+        error: null,
+        response,
+        submitting: false,
+      })
+      setLatestError(null)
+      refreshSnapshot()
+      refreshRecent()
+    } catch (error) {
+      const apiError = getApiError(error)
+      setMasterFullRestart({
+        error: apiError,
+        response: null,
+        submitting: false,
+      })
+      setLatestError(apiError)
+    }
+  }, [client, refreshRecent, refreshSnapshot, setLatestError, token])
+
   return (
     <>
       <ManagementShell
@@ -340,10 +401,16 @@ function ManagementApp() {
         detailPath={detailPath}
         detailsDisabled={services.length === 0}
         quickCommands={
-          <ResetOriginQuickCommandButton
-            active={resetOriginDrawerOpen}
-            onOpen={() => setResetOriginDrawerOpen(true)}
-          />
+          <>
+            <ResetOriginQuickCommandButton
+              active={resetOriginDrawerOpen}
+              onOpen={() => setResetOriginDrawerOpen(true)}
+            />
+            <MasterFullRestartQuickCommandButton
+              restart={masterFullRestart}
+              onRestart={() => void handleRestartMasterFull()}
+            />
+          </>
         }
         refreshing={refreshing}
         onRefresh={refreshManagementData}
@@ -1619,6 +1686,38 @@ function ResetOriginQuickCommandButton({
     >
       <Crosshair aria-hidden="true" className="size-4" />
       reset_origin
+    </button>
+  )
+}
+
+function MasterFullRestartQuickCommandButton({
+  restart,
+  onRestart,
+}: {
+  restart: QuickRestartState
+  onRestart: () => void
+}) {
+  const title = restart.error
+    ? formatApiError(restart.error)
+    : restart.response
+      ? `最近请求 ${restart.response.request_id}`
+      : "硬重启主控"
+
+  return (
+    <button
+      type="button"
+      aria-label="硬重启主控"
+      className="inline-flex h-8 items-center gap-2 rounded-md border border-red-700 bg-red-700 px-2.5 text-sm font-semibold text-white hover:bg-red-800 disabled:cursor-not-allowed disabled:opacity-70 lg:w-full lg:justify-start"
+      disabled={restart.submitting}
+      title={title}
+      onClick={onRestart}
+    >
+      {restart.submitting ? (
+        <LoaderCircle aria-hidden="true" className="size-4 animate-spin" />
+      ) : (
+        <RotateCcw aria-hidden="true" className="size-4" />
+      )}
+      {restart.submitting ? "重启中" : "重启主控"}
     </button>
   )
 }
