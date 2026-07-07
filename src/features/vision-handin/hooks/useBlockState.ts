@@ -13,6 +13,10 @@ import type { ApiError } from "@/types/management";
 import type { BlockState, MatchType, SystemMode } from "../lib/types";
 import { parseBlockStateMessage, serializeBlockStatesUpdate } from "../lib/blockStateStream";
 import { getBlockStateReconnectDelayMs } from "../lib/blockStateConnection";
+import {
+  resolveInitialVisionMode,
+  resolveVisionModeTransition,
+} from "../lib/visionModeStorage";
 
 const INITIAL_BLOCKS: BlockState[] = Array(12).fill("null");
 
@@ -22,11 +26,6 @@ export type BlockSyncStatus =
   | "live"
   | "reconnecting"
   | "error";
-
-function getParam(key: string, fallback: string): string {
-  const params = new URLSearchParams(window.location.search);
-  return params.get(key) || fallback;
-}
 
 function syncUrl(mode: SystemMode) {
   const params = new URLSearchParams();
@@ -47,15 +46,14 @@ export function useBlockState() {
   const [status, setStatus] = useState<BlockSyncStatus>("auth_required");
   const [error, setError] = useState<ApiError | null>(AUTH_REQUIRED_ERROR);
 
-  const [mode, setModeState] = useState<SystemMode>(() => ({
-    color: getParam("color", "blue") as SystemMode["color"],
-    direction: getParam("direction", "front") as SystemMode["direction"],
-    matchType: getParam("match_type", "competition_full") as SystemMode["matchType"],
-  }));
+  const [mode, setModeState] = useState<SystemMode>(() =>
+    resolveInitialVisionMode(window.location.search)
+  );
 
   const setMode = useCallback((newMode: SystemMode | ((prev: SystemMode) => SystemMode)) => {
     setModeState((prev) => {
-      const next = typeof newMode === "function" ? newMode(prev) : newMode;
+      const requested = typeof newMode === "function" ? newMode(prev) : newMode;
+      const next = resolveVisionModeTransition(prev, requested);
       if (wsRef.current?.readyState === WebSocket.OPEN) {
         wsRef.current.send(JSON.stringify({
           color: next.color,
@@ -122,13 +120,19 @@ export function useBlockState() {
         if (message.type === "block_states_snapshot") {
           setBlocks(message.blocks);
           setModeState((prev) => {
-            if (
-              prev.color === message.color &&
-              prev.matchType === message.matchType
-            ) {
+            const next = resolveVisionModeTransition(prev, {
+              ...prev,
+              color: message.color,
+              matchType: message.matchType,
+            });
+            if (prev === next || (
+              prev.color === next.color &&
+              prev.direction === next.direction &&
+              prev.matchType === next.matchType
+            )) {
               return prev;
             }
-            return { ...prev, color: message.color, matchType: message.matchType };
+            return next;
           });
           setStatus("live");
           setError(null);
@@ -184,23 +188,26 @@ export function useBlockState() {
       return;
     }
 
-    const nextBlocks = blocks.map((block, index) =>
-      index === id - 1 ? state : block
-    );
-    setBlocks(nextBlocks);
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
-      wsRef.current.send(serializeBlockStatesUpdate(nextBlocks, mode.color, mode.matchType));
-      setStatus("live");
-      setError(null);
-      return;
-    }
+    setBlocks((currentBlocks) => {
+      const nextBlocks = currentBlocks.map((block, index) =>
+        index === id - 1 ? state : block
+      );
 
-    setStatus("reconnecting");
-    setError({
-      code: "request_failed",
-      message: "块状态 WebSocket 未连接，已保留本地更改并等待重连",
+      if (wsRef.current?.readyState === WebSocket.OPEN) {
+        wsRef.current.send(serializeBlockStatesUpdate(nextBlocks, mode.color, mode.matchType));
+        setStatus("live");
+        setError(null);
+        return nextBlocks;
+      }
+
+      setStatus("reconnecting");
+      setError({
+        code: "request_failed",
+        message: "块状态 WebSocket 未连接，无法发送更改",
+      });
+      return nextBlocks;
     });
-  }, [blocks, hasToken, mode.color, mode.matchType]);
+  }, [hasToken, mode.color, mode.matchType]);
 
   const setMatchType = useCallback((matchType: MatchType) => {
     setMode((prev) => ({ ...prev, matchType }));

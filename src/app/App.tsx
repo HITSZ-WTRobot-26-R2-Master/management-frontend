@@ -2007,7 +2007,19 @@ function ResetOriginDrawer({
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
 
-    if (!command) {
+    await submitResetOriginPayload(payload)
+  }
+
+  async function handlePresetClick(preset: ResetOriginPreset) {
+    const presetPayload = toResetOriginPresetPayload(preset)
+
+    setPayload(presetPayload)
+
+    await submitResetOriginPayload(presetPayload)
+  }
+
+  async function submitResetOriginPayload(payload: ResetOriginPayload) {
+    if (!command || !confirmation.canSubmit) {
       return
     }
 
@@ -2121,10 +2133,9 @@ function ResetOriginDrawer({
                   <button
                     key={preset.id}
                     type="button"
-                    className="rounded-md border border-border bg-card px-3 py-2 text-left text-sm hover:bg-muted"
-                    onClick={() =>
-                      setPayload(toResetOriginPresetPayload(preset))
-                    }
+                    className="rounded-md border border-border bg-card px-3 py-2 text-left text-sm hover:bg-muted disabled:cursor-not-allowed disabled:opacity-70"
+                    disabled={submission.submitting}
+                    onClick={() => void handlePresetClick(preset)}
                   >
                     <span className="block truncate font-semibold text-card-foreground">
                       {preset.label}

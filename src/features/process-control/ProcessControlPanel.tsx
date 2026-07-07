@@ -10,7 +10,7 @@ import {
   Workflow,
   XCircle,
 } from "lucide-react"
-import { useCallback, useRef, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import {
   Dialog,
   DialogContent,
@@ -66,7 +66,9 @@ export function ProcessControlPanel() {
     activeRetryType,
     params,
     revision,
+    hasPendingRetryState,
     setRetryState,
+    sendRetryState,
     connected,
     status: retrySyncStatus,
     error: retrySyncError,
@@ -75,6 +77,10 @@ export function ProcessControlPanel() {
   const paramsCache = useRef<Record<RetryType, RetryStateParams>>({
     ...DEFAULT_PARAMS,
   })
+
+  useEffect(() => {
+    paramsCache.current[activeRetryType] = params
+  }, [activeRetryType, params])
 
   // Sidebar state (for global_start / retry_prepare only)
   const [confirmCommand, setConfirmCommand] =
@@ -328,6 +334,20 @@ export function ProcessControlPanel() {
                 <span className="text-[10px] text-muted-foreground">
                   rev {revision}
                 </span>
+                <button
+                  type="button"
+                  disabled={!connected}
+                  className={cn(
+                    "ml-auto inline-flex h-8 items-center gap-1.5 rounded-md border px-3 text-xs font-semibold transition-colors disabled:cursor-not-allowed",
+                    hasPendingRetryState
+                      ? "border-amber-300 bg-amber-400 text-amber-950 hover:bg-amber-300 disabled:opacity-60"
+                      : "border-border bg-card text-card-foreground hover:bg-muted disabled:text-muted-foreground disabled:opacity-70",
+                  )}
+                  onClick={sendRetryState}
+                >
+                  <Send className="size-3.5" />
+                  发送
+                </button>
               </div>
 
               {retrySyncError && (
@@ -363,7 +383,7 @@ export function ProcessControlPanel() {
                   onChange={handleParamChange}
                 />
                 <p className="mt-3 text-[10px] text-muted-foreground">
-                  参数修改后自动同步至所有设备并触发 ROS 重试命令
+                  参数修改仅保存在本地，点击发送后同步至所有设备并触发 ROS 重试命令
                 </p>
               </div>
             </div>

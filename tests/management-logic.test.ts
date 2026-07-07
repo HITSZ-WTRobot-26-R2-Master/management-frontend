@@ -57,6 +57,13 @@ import {
   getBlockStateReconnectDelayMs,
 } from "../src/features/vision-handin/lib/blockStateConnection"
 import {
+  readVisionDirectionCache,
+  resolveInitialVisionMode,
+  resolveVisionModeTransition,
+  VISION_HANDIN_DIRECTION_STORAGE_KEY,
+  writeVisionDirectionForColor,
+} from "../src/features/vision-handin/lib/visionModeStorage"
+import {
   isServiceNotFoundError,
   removeStaleServiceStatus,
 } from "../src/lib/service-not-found-recovery"
@@ -522,6 +529,212 @@ describe("vision hand-in decision stream", () => {
     expect(model.pathSegments[0].from.x).toBe(104)
     expect(model.pathSegments[3].to.x).toBe(-4)
     expect(model.scrollCircles[0].center).toEqual(stepFive)
+  })
+})
+
+function createMemoryStorage(initialValues: Record<string, string> = {}) {
+  const values = new Map(Object.entries(initialValues))
+
+  return {
+    getItem(key: string) {
+      return values.get(key) ?? null
+    },
+    setItem(key: string, value: string) {
+      values.set(key, value)
+    },
+  }
+}
+
+describe("vision hand-in direction cache", () => {
+  test("reads valid per-color direction cache entries", () => {
+    const storage = createMemoryStorage({
+      [VISION_HANDIN_DIRECTION_STORAGE_KEY]: JSON.stringify({
+        blue: "front",
+        red: "back",
+      }),
+    })
+
+    expect(readVisionDirectionCache(storage)).toEqual({
+      blue: "front",
+      red: "back",
+    })
+  })
+
+  test("ignores invalid cache JSON and invalid per-color values", () => {
+    expect(
+      readVisionDirectionCache(
+        createMemoryStorage({
+          [VISION_HANDIN_DIRECTION_STORAGE_KEY]: "{",
+        }),
+      ),
+    ).toEqual({})
+
+    expect(
+      readVisionDirectionCache(
+        createMemoryStorage({
+          [VISION_HANDIN_DIRECTION_STORAGE_KEY]: JSON.stringify({
+            blue: "sideways",
+            red: "back",
+          }),
+        }),
+      ),
+    ).toEqual({ red: "back" })
+  })
+
+  test("uses cached direction before URL direction for the active color", () => {
+    const storage = createMemoryStorage({
+      [VISION_HANDIN_DIRECTION_STORAGE_KEY]: JSON.stringify({
+        blue: "front",
+        red: "back",
+      }),
+    })
+
+    expect(
+      resolveInitialVisionMode(
+        "?color=blue&direction=back&match_type=martial_merlin",
+        storage,
+      ),
+    ).toEqual({
+      color: "blue",
+      direction: "front",
+      matchType: "martial_merlin",
+    })
+
+    expect(resolveInitialVisionMode("?color=red", storage)).toEqual({
+      color: "red",
+      direction: "back",
+      matchType: "competition_full",
+    })
+  })
+
+  test("falls back to URL and defaults when cache entries are missing", () => {
+    const storage = createMemoryStorage()
+
+    expect(
+      resolveInitialVisionMode(
+        "?color=red&direction=back&match_type=combat_only_top",
+        storage,
+      ),
+    ).toEqual({
+      color: "red",
+      direction: "back",
+      matchType: "combat_only_top",
+    })
+
+    expect(resolveInitialVisionMode("?color=green", storage)).toEqual({
+      color: "blue",
+      direction: "front",
+      matchType: "competition_full",
+    })
+  })
+
+  test("persists direction changes only for the current color", () => {
+    const storage = createMemoryStorage({
+      [VISION_HANDIN_DIRECTION_STORAGE_KEY]: JSON.stringify({
+        blue: "back",
+        red: "front",
+      }),
+    })
+    const previous = {
+      color: "red",
+      direction: "front",
+      matchType: "competition_full",
+    } as const
+
+    expect(
+      resolveVisionModeTransition(
+        previous,
+        { ...previous, direction: "back" },
+        storage,
+      ),
+    ).toEqual({
+      color: "red",
+      direction: "back",
+      matchType: "competition_full",
+    })
+    expect(readVisionDirectionCache(storage)).toEqual({
+      blue: "back",
+      red: "back",
+    })
+  })
+
+  test("restores cached direction when switching colors", () => {
+    const storage = createMemoryStorage({
+      [VISION_HANDIN_DIRECTION_STORAGE_KEY]: JSON.stringify({
+        blue: "front",
+        red: "back",
+      }),
+    })
+    const previous = {
+      color: "blue",
+      direction: "front",
+      matchType: "competition_full",
+    } as const
+
+    expect(
+      resolveVisionModeTransition(
+        previous,
+        { ...previous, color: "red" },
+        storage,
+      ),
+    ).toEqual({
+      color: "red",
+      direction: "back",
+      matchType: "competition_full",
+    })
+  })
+
+  test("seeds missing target color direction when switching colors", () => {
+    const storage = createMemoryStorage({
+      [VISION_HANDIN_DIRECTION_STORAGE_KEY]: JSON.stringify({
+        blue: "back",
+      }),
+    })
+    const previous = {
+      color: "blue",
+      direction: "back",
+      matchType: "competition_full",
+    } as const
+
+    expect(
+      resolveVisionModeTransition(
+        previous,
+        { ...previous, color: "red" },
+        storage,
+      ),
+    ).toEqual({
+      color: "red",
+      direction: "back",
+      matchType: "competition_full",
+    })
+    expect(readVisionDirectionCache(storage)).toEqual({
+      blue: "back",
+      red: "back",
+    })
+  })
+
+  test("does not throw when browser storage access fails", () => {
+    const throwingStorage = {
+      getItem() {
+        throw new Error("blocked")
+      },
+      setItem() {
+        throw new Error("blocked")
+      },
+    }
+
+    expect(
+      resolveInitialVisionMode(
+        "?color=red&direction=back&match_type=combat_only_middle",
+        throwingStorage,
+      ),
+    ).toEqual({
+      color: "red",
+      direction: "back",
+      matchType: "combat_only_middle",
+    })
+
+    writeVisionDirectionForColor("red", "front", throwingStorage)
   })
 })
 

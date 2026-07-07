@@ -1,5 +1,5 @@
 import { useAtomValue } from "jotai";
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import {
   AUTH_REQUIRED_ERROR,
   buildRetryStateWebSocketUrl,
@@ -25,6 +25,43 @@ const DEFAULT_PARAMS: Record<RetryType, RetryStateParams> = {
   retry_combat: { combat_source: 1, combat_place_layer: 1 },
 };
 
+function areRetryParamsEqual(
+  left: RetryStateParams,
+  right: RetryStateParams,
+) {
+  const keys = new Set<keyof RetryStateParams>([
+    ...(Object.keys(left) as Array<keyof RetryStateParams>),
+    ...(Object.keys(right) as Array<keyof RetryStateParams>),
+  ]);
+
+  for (const key of keys) {
+    const leftValue = left[key];
+    const rightValue = right[key];
+
+    if (key === "taken_r2_blocks") {
+      if (!Array.isArray(leftValue) || !Array.isArray(rightValue)) {
+        return false;
+      }
+
+      if (leftValue.length !== rightValue.length) {
+        return false;
+      }
+
+      if (leftValue.some((value, index) => value !== rightValue[index])) {
+        return false;
+      }
+
+      continue;
+    }
+
+    if (leftValue !== rightValue) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
 export function useRetryState() {
   const baseUrl = useAtomValue(baseUrlAtom);
   const token = useAtomValue(authTokenAtom);
@@ -32,6 +69,11 @@ export function useRetryState() {
   const [activeRetryType, setActiveRetryType] =
     useState<RetryType>(INITIAL_RETRY_TYPE);
   const [params, setParams] = useState<RetryStateParams>(
+    DEFAULT_PARAMS[INITIAL_RETRY_TYPE],
+  );
+  const [liveActiveRetryType, setLiveActiveRetryType] =
+    useState<RetryType>(INITIAL_RETRY_TYPE);
+  const [liveParams, setLiveParams] = useState<RetryStateParams>(
     DEFAULT_PARAMS[INITIAL_RETRY_TYPE],
   );
   const [revision, setRevision] = useState(0);
@@ -96,6 +138,8 @@ export function useRetryState() {
         if (message.type === "retry_state_snapshot") {
           setActiveRetryType(message.active_retry_type);
           setParams(message.params);
+          setLiveActiveRetryType(message.active_retry_type);
+          setLiveParams(message.params);
           setRevision(message.revision);
           setStatus("live");
           setError(null);
@@ -147,6 +191,13 @@ export function useRetryState() {
     };
   }, [baseUrl, hasToken, token]);
 
+  const hasPendingRetryState = useMemo(
+    () =>
+      activeRetryType !== liveActiveRetryType ||
+      !areRetryParamsEqual(params, liveParams),
+    [activeRetryType, liveActiveRetryType, liveParams, params],
+  );
+
   const setRetryState = useCallback(
     (type: RetryType, newParams: RetryStateParams) => {
       if (!hasToken) {
@@ -157,30 +208,40 @@ export function useRetryState() {
 
       setActiveRetryType(type);
       setParams(newParams);
-
-      if (wsRef.current?.readyState === WebSocket.OPEN) {
-        wsRef.current.send(
-          JSON.stringify({ active_retry_type: type, params: newParams }),
-        );
-        setStatus("live");
-        setError(null);
-        return;
-      }
-
-      setStatus("reconnecting");
-      setError({
-        code: "request_failed",
-        message: "重试状态 WebSocket 未连接，已保留本地更改并等待重连",
-      });
     },
     [hasToken],
   );
+
+  const sendRetryState = useCallback(() => {
+    if (!hasToken) {
+      setStatus("auth_required");
+      setError(AUTH_REQUIRED_ERROR);
+      return;
+    }
+
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(
+        JSON.stringify({ active_retry_type: activeRetryType, params }),
+      );
+      setStatus("live");
+      setError(null);
+      return;
+    }
+
+    setStatus("reconnecting");
+    setError({
+      code: "request_failed",
+      message: "重试状态 WebSocket 未连接，无法发送本地更改",
+    });
+  }, [activeRetryType, hasToken, params]);
 
   return {
     activeRetryType,
     params,
     revision,
+    hasPendingRetryState,
     setRetryState,
+    sendRetryState,
     connected: status === "live",
     status,
     error,
