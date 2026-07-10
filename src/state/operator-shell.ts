@@ -6,6 +6,7 @@ import {
 } from "@/lib/management-api"
 import type {
   ApiError,
+  BlockStatesColor,
   CommandDefinition,
   ConnectionState,
   ManagementEvent,
@@ -29,6 +30,8 @@ export const authTokenAtom = atomWithStorage(
   authTokenStorage,
   { getOnInit: true },
 )
+
+export const allianceColorAtom = atom<BlockStatesColor>("blue")
 
 export const selectedServiceNameAtom = atom("")
 

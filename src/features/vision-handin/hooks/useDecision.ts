@@ -10,8 +10,8 @@ import {
   baseUrlAtom,
 } from "@/state/operator-shell";
 import type { ApiError, DecisionSnapshot } from "@/types/management";
+import { getBlockStateReconnectDelayMs } from "@/lib/block-state-connection";
 import { parseDecisionMessage } from "../lib/decisionStream";
-import { getBlockStateReconnectDelayMs } from "../lib/blockStateConnection";
 
 const INITIAL_DECISION: DecisionSnapshot = {
   available: false,

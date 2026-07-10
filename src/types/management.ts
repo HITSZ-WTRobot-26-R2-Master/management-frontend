@@ -530,7 +530,17 @@ export interface DashboardSnapshot {
   map_pose: PoseSourceSnapshot<MasterControlPoseMessage> | null
 }
 
+export type BlockState = "unknown" | "null" | "r1" | "r2" | "fake"
+
 export type BlockStateValue = 0 | 1 | 2 | 3 | 4
+
+export type BlockStatesColor = "blue" | "red"
+
+export type MatchType =
+  | "martial_merlin"
+  | "combat_only_middle"
+  | "combat_only_top"
+  | "competition_full"
 
 export interface DashboardSnapshotMessage {
   type: "dashboard_snapshot"

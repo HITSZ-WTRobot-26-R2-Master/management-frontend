@@ -61,7 +61,7 @@ export function R2ControllerPage() {
   ]
 
   return (
-    <div className="min-h-screen bg-background p-2 sm:p-3">
+    <div className="min-h-screen p-2 sm:p-3">
       <div className="mx-auto max-w-[1600px] flex flex-col xl:flex-row gap-3">
         <div className="flex-1 min-w-0 flex flex-col gap-3">
           <header>

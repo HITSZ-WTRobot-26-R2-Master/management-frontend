@@ -74,6 +74,7 @@ import { ArmControlPanel } from "@/features/arm-console/ArmControlPanel"
 import { ProcessControlPanel } from "@/features/process-control/ProcessControlPanel"
 import { R2ControllerPage } from "@/features/r2-controller/R2ControllerPage"
 import { useDashboardStream } from "@/hooks/useDashboardStream"
+import { useAllianceColorSync } from "@/hooks/useAllianceColorSync"
 import { useLaserDetailStream } from "@/hooks/useLaserDetailStream"
 import {
   type CommandDiscoveryState,
@@ -107,6 +108,7 @@ import {
   isValidManagementBaseUrl,
 } from "@/lib/management-api"
 import {
+  allianceColorAtom,
   authTokenAtom,
   baseUrlAtom,
   clearAuthTokenAtom,
@@ -143,6 +145,7 @@ import type {
   ServiceStatus,
 } from "@/types/management"
 import { getCommandConfirmationState } from "@/lib/command-confirmation"
+import { getAllianceBackgroundColor } from "@/lib/alliance-color"
 import {
   formatRosSummary,
   getToneForOverallLevel,
@@ -272,14 +275,22 @@ function decodeRouteParam(value: string) {
 }
 
 export function App() {
+  const allianceColor = useAtomValue(allianceColorAtom)
+  useAllianceColorSync()
+
   return (
-    <BrowserRouter>
-      <Routes>
-        <Route path="/vision" element={<VisionHandinPage />} />
-        <Route path="/controller" element={<R2ControllerPage />} />
-        <Route path="/*" element={<ManagementApp />} />
-      </Routes>
-    </BrowserRouter>
+    <div
+      className="h-full min-h-0 text-foreground transition-colors duration-200"
+      style={{ backgroundColor: getAllianceBackgroundColor(allianceColor) }}
+    >
+      <BrowserRouter>
+        <Routes>
+          <Route path="/vision" element={<VisionHandinPage />} />
+          <Route path="/controller" element={<R2ControllerPage />} />
+          <Route path="/*" element={<ManagementApp />} />
+        </Routes>
+      </BrowserRouter>
+    </div>
   )
 }
 

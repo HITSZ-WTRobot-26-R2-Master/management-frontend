@@ -1,10 +1,10 @@
-export type BlockState = "unknown" | "null" | "r1" | "r2" | "fake";
+import type {
+  BlockState,
+  BlockStatesColor,
+  MatchType,
+} from "@/types/management";
 
-export type MatchType =
-  | "martial_merlin"
-  | "combat_only_middle"
-  | "combat_only_top"
-  | "competition_full";
+export type { BlockState, MatchType };
 
 export const MATCH_TYPE_LABELS: Record<MatchType, string> = {
   martial_merlin: "技能赛\n一区",
@@ -14,7 +14,7 @@ export const MATCH_TYPE_LABELS: Record<MatchType, string> = {
 };
 
 export interface SystemMode {
-  color: "blue" | "red";
+  color: BlockStatesColor;
   direction: "front" | "back";
   matchType: MatchType;
 }

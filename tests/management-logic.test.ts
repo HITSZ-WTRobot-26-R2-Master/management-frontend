@@ -10,6 +10,10 @@ import {
   getChassisActionStateDisplayFields,
 } from "../src/lib/chassis-action-state-display"
 import { getCommandConfirmationState } from "../src/lib/command-confirmation"
+import {
+  getAllianceBackgroundColor,
+  getOpponentAllianceColor,
+} from "../src/lib/alliance-color"
 import { applyServiceSummaryUpdates } from "../src/lib/dashboard-service-summary"
 import {
   DEFAULT_RESET_ORIGIN_PAYLOAD,
@@ -44,7 +48,7 @@ import {
   parseServiceLogWebSocketMessage,
   trimServiceLogLines,
 } from "../src/lib/service-log-stream"
-import { parseBlockStateMessage } from "../src/features/vision-handin/lib/blockStateStream"
+import { parseBlockStateMessage } from "../src/lib/block-state-stream"
 import { parseDecisionMessage } from "../src/features/vision-handin/lib/decisionStream"
 import {
   buildDecisionOverlayModel,
@@ -55,7 +59,11 @@ import {
 import {
   BLOCK_STATE_RECONNECT_DELAY_MS,
   getBlockStateReconnectDelayMs,
-} from "../src/features/vision-handin/lib/blockStateConnection"
+} from "../src/lib/block-state-connection"
+import {
+  getAllowedRetrySpearIndices,
+  resolveRetrySpearIndex,
+} from "../src/features/process-control/lib/retrySpearIndexRules"
 import {
   readVisionDirectionCache,
   resolveInitialVisionMode,
@@ -373,6 +381,13 @@ describe("management API URL helpers", () => {
 })
 
 describe("vision hand-in block state stream", () => {
+  test("maps alliance colors to shared background colors", () => {
+    expect(getAllianceBackgroundColor("blue")).toBe("rgb(128, 191, 209)")
+    expect(getAllianceBackgroundColor("red")).toBe("rgb(236, 162, 151)")
+    expect(getOpponentAllianceColor("blue")).toBe("red")
+    expect(getOpponentAllianceColor("red")).toBe("blue")
+  })
+
   test("retries the first failed websocket handshake immediately once", () => {
     expect(
       getBlockStateReconnectDelayMs({
@@ -469,6 +484,53 @@ describe("vision hand-in block state stream", () => {
         }),
       ),
     ).toBeNull()
+  })
+})
+
+describe("retry spear index rules", () => {
+  test("limits martial merlin red side to spear indices 1 through 3", () => {
+    expect(
+      getAllowedRetrySpearIndices({
+        color: "red",
+        matchType: "martial_merlin",
+      }),
+    ).toEqual([1, 2, 3])
+    expect(
+      resolveRetrySpearIndex(5, {
+        color: "red",
+        matchType: "martial_merlin",
+      }),
+    ).toBe(1)
+  })
+
+  test("limits martial merlin blue side to spear indices 4 through 6", () => {
+    expect(
+      getAllowedRetrySpearIndices({
+        color: "blue",
+        matchType: "martial_merlin",
+      }),
+    ).toEqual([4, 5, 6])
+    expect(
+      resolveRetrySpearIndex(2, {
+        color: "blue",
+        matchType: "martial_merlin",
+      }),
+    ).toBe(4)
+  })
+
+  test("allows all retry spear indices outside martial merlin", () => {
+    expect(
+      getAllowedRetrySpearIndices({
+        color: "red",
+        matchType: "competition_full",
+      }),
+    ).toEqual([1, 2, 3, 4, 5, 6])
+    expect(
+      resolveRetrySpearIndex(6, {
+        color: "red",
+        matchType: "competition_full",
+      }),
+    ).toBe(6)
   })
 })
 

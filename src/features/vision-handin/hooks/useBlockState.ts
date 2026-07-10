@@ -1,18 +1,19 @@
-import { useAtomValue } from "jotai";
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useAtomValue, useSetAtom } from "jotai";
+import { useState, useCallback, useEffect, useLayoutEffect, useRef } from "react";
 import {
   AUTH_REQUIRED_ERROR,
   buildBlockStatesWebSocketUrl,
   hasManagementAuthToken,
 } from "@/lib/management-api";
 import {
+  allianceColorAtom,
   authTokenAtom,
   baseUrlAtom,
 } from "@/state/operator-shell";
 import type { ApiError } from "@/types/management";
+import { getBlockStateReconnectDelayMs } from "@/lib/block-state-connection";
+import { parseBlockStateMessage, serializeBlockStatesUpdate } from "@/lib/block-state-stream";
 import type { BlockState, MatchType, SystemMode } from "../lib/types";
-import { parseBlockStateMessage, serializeBlockStatesUpdate } from "../lib/blockStateStream";
-import { getBlockStateReconnectDelayMs } from "../lib/blockStateConnection";
 import {
   resolveInitialVisionMode,
   resolveVisionModeTransition,
@@ -39,6 +40,7 @@ function syncUrl(mode: SystemMode) {
 export function useBlockState() {
   const baseUrl = useAtomValue(baseUrlAtom);
   const token = useAtomValue(authTokenAtom);
+  const setAllianceColor = useSetAtom(allianceColorAtom);
   const hasToken = hasManagementAuthToken(token);
   const [blocks, setBlocks] = useState<BlockState[]>(INITIAL_BLOCKS);
   const reconnectTimerRef = useRef<number | null>(null);
@@ -49,6 +51,10 @@ export function useBlockState() {
   const [mode, setModeState] = useState<SystemMode>(() =>
     resolveInitialVisionMode(window.location.search)
   );
+
+  useLayoutEffect(() => {
+    setAllianceColor(mode.color);
+  }, [mode.color, setAllianceColor]);
 
   const setMode = useCallback((newMode: SystemMode | ((prev: SystemMode) => SystemMode)) => {
     setModeState((prev) => {
@@ -119,6 +125,7 @@ export function useBlockState() {
 
         if (message.type === "block_states_snapshot") {
           setBlocks(message.blocks);
+          setAllianceColor(message.color);
           setModeState((prev) => {
             const next = resolveVisionModeTransition(prev, {
               ...prev,
@@ -179,7 +186,7 @@ export function useBlockState() {
       wsRef.current?.close();
       wsRef.current = null;
     };
-  }, [baseUrl, hasToken, token]);
+  }, [baseUrl, hasToken, setAllianceColor, token]);
 
   const setBlockState = useCallback((id: number, state: BlockState) => {
     if (!hasToken) {

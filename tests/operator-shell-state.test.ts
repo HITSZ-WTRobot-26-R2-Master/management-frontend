@@ -54,20 +54,25 @@ describe("operator shell persisted state", () => {
 
     installWebStorage({ local, session })
 
-    const { authTokenAtom, clearAuthTokenAtom } = await import(
+    const { allianceColorAtom, authTokenAtom, clearAuthTokenAtom } = await import(
       "../src/state/operator-shell"
     )
     const store = createStore()
 
+    expect(store.get(allianceColorAtom)).toBe("blue")
     expect(store.get(authTokenAtom)).toBe("saved-token")
     expect(session.getItem(authTokenStorageKey)).toBeNull()
 
+    store.set(allianceColorAtom, "red")
     store.set(authTokenAtom, "next-token")
 
+    expect(store.get(allianceColorAtom)).toBe("red")
     expect(local.getItem(authTokenStorageKey)).toBe(
       JSON.stringify("next-token"),
     )
+    expect(local.getItem("r2-management.alliance-color")).toBeNull()
     expect(session.getItem(authTokenStorageKey)).toBeNull()
+    expect(session.getItem("r2-management.alliance-color")).toBeNull()
 
     store.set(clearAuthTokenAtom)
 

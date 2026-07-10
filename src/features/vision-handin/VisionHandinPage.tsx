@@ -6,6 +6,7 @@ import { SystemToggle } from "./components/SystemToggle";
 import { MatchTypeToggle } from "./components/MatchTypeToggle";
 import { SidePanel } from "./components/SidePanel";
 import { MainGrid } from "./components/MainGrid";
+import { getAllianceBackgroundColor, getOpponentAllianceColor } from "@/lib/alliance-color";
 import type { BlockSyncStatus } from "./hooks/useBlockState";
 
 const COUNT_ITEMS: { state: string; label: string; className: string }[] = [
@@ -45,19 +46,15 @@ export function VisionHandinPage() {
     return c;
   }, [blocks]);
 
-  const modeBg = mode.color === "red" ? "rgb(236, 162, 151)" : "rgb(128, 191, 209)";
   const isBlue = mode.color === "blue";
   const isFront = mode.direction === "front";
   const showTop = isBlue === isFront;
   const showBottom = isBlue !== isFront;
   const opponentLabel = isBlue ? "红方" : "蓝方";
-  const opponentBg = isBlue ? "rgb(236, 162, 151)" : "rgb(128, 191, 209)";
+  const opponentBg = getAllianceBackgroundColor(getOpponentAllianceColor(mode.color));
 
   return (
-    <div
-      className="h-screen text-foreground flex flex-col"
-      style={{ backgroundColor: modeBg }}
-    >
+    <div className="h-screen text-foreground flex flex-col">
       {/* 顶部栏 */}
       <header className="flex items-center justify-between px-8 py-3 bg-background/60 backdrop-blur-sm gap-4">
         <div className="flex items-center gap-3 shrink-0">

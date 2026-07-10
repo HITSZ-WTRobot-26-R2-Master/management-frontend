@@ -8,22 +8,6 @@ export const STATE_LABELS: Record<BlockState, string> = {
   fake: "Fake",
 };
 
-export const STATE_VALUES: Record<BlockState, number> = {
-  unknown: 0,
-  null: 1,
-  r1: 2,
-  r2: 3,
-  fake: 4,
-};
-
-export const VALUE_TO_STATE: Record<number, BlockState> = {
-  0: "unknown",
-  1: "null",
-  2: "r1",
-  3: "r2",
-  4: "fake",
-};
-
 /** Blue + Front 模式下 (interactive_row=1..3, interactive_col=1..4) 的 ID 排布 */
 const BLUE_FRONT_MAP: number[][] = [
   [12, 9, 6, 3],

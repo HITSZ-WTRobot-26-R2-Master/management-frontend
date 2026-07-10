@@ -10,7 +10,7 @@ import {
   Workflow,
   XCircle,
 } from "lucide-react"
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   Dialog,
   DialogContent,
@@ -26,6 +26,13 @@ import { useCommandDiscovery } from "@/hooks/useCommandDiscovery"
 import { authTokenAtom, managementApiClientAtom } from "@/state/operator-shell"
 import type { CommandDefinition, CommandResponse, JsonValue, RetryType, RetryStateParams } from "@/types/management"
 import { useRetryState } from "./hooks/useRetryState"
+import { useReadonlyBlockStates } from "./hooks/useReadonlyBlockStates"
+import {
+  getAllowedRetrySpearIndices,
+  resolveRetrySpearIndex,
+  RETRY_TAKE_SPEAR_INDEX_OPTIONS,
+  type RetrySpearIndexContext,
+} from "./lib/retrySpearIndexRules"
 
 const TARGET_MASTER_FULL = "master_full"
 
@@ -73,6 +80,14 @@ export function ProcessControlPanel() {
     status: retrySyncStatus,
     error: retrySyncError,
   } = useRetryState()
+  const blockStates = useReadonlyBlockStates()
+  const retrySpearIndexContext = useMemo<RetrySpearIndexContext>(
+    () => ({
+      color: blockStates.color,
+      matchType: blockStates.matchType,
+    }),
+    [blockStates.color, blockStates.matchType],
+  )
 
   const paramsCache = useRef<Record<RetryType, RetryStateParams>>({
     ...DEFAULT_PARAMS,
@@ -135,15 +150,47 @@ export function ProcessControlPanel() {
   )
 
   const handleTabChange = (type: RetryType) => {
-    const cachedParams = paramsCache.current[type] ?? DEFAULT_PARAMS[type]
+    let cachedParams = paramsCache.current[type] ?? DEFAULT_PARAMS[type]
+    if (type === "retry_take_spear") {
+      const spearIndex = resolveRetrySpearIndex(
+        cachedParams.spear_index ?? 1,
+        retrySpearIndexContext,
+      )
+      cachedParams = { ...cachedParams, spear_index: spearIndex }
+      paramsCache.current[type] = cachedParams
+    }
     setRetryState(type, cachedParams)
   }
 
   const handleParamChange = (key: string, value: JsonValue) => {
-    const updatedParams = { ...params, [key]: value }
+    const nextValue =
+      activeRetryType === "retry_take_spear" &&
+      key === "spear_index" &&
+      typeof value === "number"
+        ? resolveRetrySpearIndex(value, retrySpearIndexContext)
+        : value
+    const updatedParams = { ...params, [key]: nextValue }
     paramsCache.current[activeRetryType] = updatedParams
     setRetryState(activeRetryType, updatedParams)
   }
+
+  useEffect(() => {
+    if (activeRetryType !== "retry_take_spear") {
+      return
+    }
+
+    const spearIndex = resolveRetrySpearIndex(
+      params.spear_index ?? 1,
+      retrySpearIndexContext,
+    )
+    if (spearIndex === params.spear_index) {
+      return
+    }
+
+    const updatedParams = { ...params, spear_index: spearIndex }
+    paramsCache.current.retry_take_spear = updatedParams
+    setRetryState("retry_take_spear", updatedParams)
+  }, [activeRetryType, params, retrySpearIndexContext, setRetryState])
 
   if (!hasToken) {
     return (
@@ -380,6 +427,7 @@ export function ProcessControlPanel() {
                 <RetryParamsInput
                   cmdName={activeRetryType}
                   params={params}
+                  retrySpearIndexContext={retrySpearIndexContext}
                   onChange={handleParamChange}
                 />
                 <p className="mt-3 text-[10px] text-muted-foreground">
@@ -454,10 +502,12 @@ export function ProcessControlPanel() {
 function RetryParamsInput({
   cmdName,
   params,
+  retrySpearIndexContext,
   onChange,
 }: {
   cmdName: string
   params: RetryStateParams
+  retrySpearIndexContext: RetrySpearIndexContext
   onChange: (key: string, value: JsonValue) => void
 }) {
   switch (cmdName) {
@@ -466,12 +516,14 @@ function RetryParamsInput({
         <>
           <RadioGroup
             label="spear_index"
-            options={[
-              { value: 1, label: "1" },
-              { value: 2, label: "2" },
-              { value: 3, label: "3" },
-            ]}
-            selected={(params.spear_index as number) ?? 1}
+            options={RETRY_TAKE_SPEAR_INDEX_OPTIONS.map((value) => ({
+              value,
+              label: String(value),
+              disabled: !getAllowedRetrySpearIndices(
+                retrySpearIndexContext,
+              ).includes(value),
+            }))}
+            selected={params.spear_index ?? 1}
             onChange={(v) => onChange("spear_index", v)}
           />
           <ParamField label="previous_spear_needs_dock">
@@ -555,7 +607,7 @@ function RadioGroup({
   onChange,
 }: {
   label: string
-  options: { value: number; label: string }[]
+  options: { value: number; label: string; disabled?: boolean }[]
   selected: number
   onChange: (value: number) => void
 }) {
@@ -573,8 +625,12 @@ function RadioGroup({
               "rounded-md border px-4 py-2 text-sm font-medium transition-colors",
               selected === opt.value
                 ? "border-primary bg-primary text-primary-foreground"
+                : opt.disabled
+                  ? "border-border bg-muted text-muted-foreground"
                 : "border-border bg-card text-card-foreground hover:bg-muted",
+              "disabled:cursor-not-allowed disabled:opacity-50",
             )}
+            disabled={opt.disabled}
             onClick={() => onChange(opt.value)}
           >
             {opt.label}
